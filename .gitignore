@@ -1,0 +1,23 @@
+# Run artifacts (large videos; do not commit)
+work/
+exports/
+
+# Media / archives if created outside those folders
+*.mp4
+*.mov
+*.zip
+*.wav
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# App / OS
+.gradio/
+.DS_Store
+*.egg-info/
+.pytest_cache/
