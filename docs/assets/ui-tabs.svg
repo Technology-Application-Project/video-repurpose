@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 280" role="img" aria-labelledby="ui-title ui-desc">
+  <title id="ui-title">Gradio four tabs</title>
+  <desc id="ui-desc">Input, transcript, review, and package tabs with a 3 to 5 keep gate.</desc>
+  <rect width="1100" height="280" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700" fill="#0f172a">Gradio UI  ·  app.py</text>
+  <text x="32" y="56" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#64748b">One in-memory state dict. Export stays disabled until Confirm selection.</text>
+
+  <rect x="32" y="80" width="240" height="140" rx="12" fill="#1e293b"/>
+  <text x="52" y="108" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">1. Input</text>
+  <text x="52" y="132" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#cbd5e1">local mp4, topic,</text>
+  <text x="52" y="148" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#cbd5e1">objectives, source URL</text>
+  <text x="52" y="172" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#94a3b8">clip length sliders</text>
+  <text x="52" y="188" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#94a3b8">aspect Original / 16:9 / 9:16 / 1:1</text>
+  <text x="52" y="204" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#a5b4fc">Run transcription</text>
+
+  <rect x="292" y="80" width="240" height="140" rx="12" fill="#2563eb"/>
+  <text x="312" y="108" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">2. Transcript</text>
+  <text x="312" y="132" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#dbeafe">timestamp table</text>
+  <text x="312" y="148" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#dbeafe">Nominate + rank clips</text>
+  <text x="312" y="172" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#bfdbfe">read-only Top 10 table</text>
+  <text x="312" y="188" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#bfdbfe">id · score · times · title</text>
+
+  <rect x="552" y="80" width="240" height="140" rx="12" fill="#d97706"/>
+  <text x="572" y="108" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">3. Review</text>
+  <text x="572" y="132" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#fff7ed">preview · title · takeaway</text>
+  <text x="572" y="148" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#fff7ed">edit start / end</text>
+  <text x="572" y="172" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#ffedd5">Keep checkbox 35</text>
+  <text x="572" y="188" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#ffedd5">Confirm selection</text>
+  <text x="572" y="204" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#fde68a">required gate</text>
+
+  <rect x="812" y="80" width="256" height="140" rx="12" fill="#059669"/>
+  <text x="832" y="108" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">4. Package + export</text>
+  <text x="832" y="132" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#d1fae5">intro title + subtitle</text>
+  <text x="832" y="148" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#d1fae5">key takeaway + CTA</text>
+  <text x="832" y="172" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#a7f3d0">one compilation.mp4</text>
+  <text x="832" y="188" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#a7f3d0">zip: mp4 + srt + post</text>
+  <text x="832" y="204" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#6ee7b7">no auto-publish</text>
+
+  <text x="32" y="252" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#334155">Export rereads the Review form so last-minute End-time edits apply even without clicking Confirm again.</text>
+</svg>

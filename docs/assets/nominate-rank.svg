@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 420" role="img" aria-labelledby="nr-title nr-desc">
+  <title id="nr-title">Nominate then rank</title>
+  <desc id="nr-desc">Ollama nominates clips from transcript chunks. MiniLM only ranks against learning objectives.</desc>
+  <defs>
+    <marker id="nr-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="420" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700" fill="#0f172a">LLM nominates  ·  embeddings only rank</text>
+  <text x="32" y="56" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#64748b">Neither model cuts video. The human keep-gate is the only export decision.</text>
+
+  <rect x="32" y="80" width="500" height="300" rx="14" fill="#fff" stroke="#ddd6fe" stroke-width="2"/>
+  <text x="52" y="108" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" fill="#6d28d9">1. nominate.py   Ollama</text>
+  <text x="52" y="130" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">Sees topic + learning objectives + timestamped transcript</text>
+
+  <rect x="52" y="148" width="140" height="48" rx="8" fill="#ede9fe"/>
+  <text x="122" y="168" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#5b21b6">chunk ~9000 ch</text>
+  <text x="122" y="184" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#7c3aed">overlap last 2 sents</text>
+
+  <rect x="212" y="148" width="140" height="48" rx="8" fill="#7c3aed"/>
+  <text x="282" y="168" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">qwen2.5 JSON</text>
+  <text x="282" y="184" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#ede9fe">812 candidates</text>
+
+  <rect x="372" y="148" width="140" height="48" rx="8" fill="#5b21b6"/>
+  <text x="442" y="168" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">normalize</text>
+  <text x="442" y="184" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#ede9fe">snap + clip length</text>
+
+  <line x1="192" y1="172" x2="208" y2="172" stroke="#475569" stroke-width="2" marker-end="url(#nr-arrow)"/>
+  <line x1="352" y1="172" x2="368" y2="172" stroke="#475569" stroke-width="2" marker-end="url(#nr-arrow)"/>
+
+  <rect x="52" y="220" width="460" height="72" rx="8" fill="#f5f3ff"/>
+  <text x="72" y="246" font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#4c1d95">title, takeaway, quote, reason, start, end</text>
+  <text x="72" y="268" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#6d28d9">Times must exist in WhisperX segments. Fallback: sliding window if fewer than 3 clips.</text>
+
+  <text x="52" y="322" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">Prompt: one knowledge point, skip greetings, topic fit over hook.</text>
+  <text x="52" y="342" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">A clip can span several transcript sentences; a chunk is not a clip.</text>
+
+  <rect x="568" y="80" width="500" height="300" rx="14" fill="#fff" stroke="#a5f3fc" stroke-width="2"/>
+  <text x="588" y="108" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" fill="#0e7490">2. rank.py   MiniLM</text>
+  <text x="588" y="130" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">Does not invent clips. Scores existing candidates only.</text>
+
+  <rect x="588" y="148" width="220" height="70" rx="8" fill="#cffafe"/>
+  <text x="698" y="174" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#155e75">candidate vector</text>
+  <text x="698" y="194" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#0e7490">title + takeaway + quote + excerpt</text>
+
+  <rect x="828" y="148" width="220" height="70" rx="8" fill="#0891b2"/>
+  <text x="938" y="174" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">objective vectors</text>
+  <text x="938" y="194" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#cffafe">one embedding per objective</text>
+
+  <rect x="588" y="240" width="460" height="70" rx="8" fill="#ecfeff"/>
+  <text x="818" y="268" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="700" fill="#0e7490">score = max cosine similarity</text>
+  <text x="818" y="290" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#155e75">sort descending  ·  keep Top 10  ·  never auto-delete</text>
+
+  <text x="588" y="342" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">Excerpt is the WhisperX text inside [start, end], so rank sees spoken content.</text>
+
+  <line x1="532" y1="230" x2="564" y2="230" stroke="#475569" stroke-width="2" marker-end="url(#nr-arrow)"/>
+</svg>

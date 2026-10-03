@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>POC Pipeline — Educational Short Clip Demo</title>
+  <title>Educational Short Clip Demo — POC documentation</title>
   <script type="module">
     import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
     mermaid.initialize({
@@ -22,7 +22,7 @@
   </script>
   <style>
     :root {
-      --bg: #f8fafc;
+      --bg: #f1f5f9;
       --card: #ffffff;
       --ink: #0f172a;
       --muted: #475569;
@@ -38,33 +38,34 @@
       line-height: 1.55;
     }
     header {
-      background: #0f172a;
+      background: linear-gradient(160deg, #0f172a 0%, #1e1b4b 100%);
       color: #fff;
-      padding: 2.2rem 1.5rem 1.8rem;
+      padding: 2.4rem 1.5rem 1.9rem;
     }
-    header .wrap, main, footer { max-width: 1080px; margin: 0 auto; }
-    header h1 { margin: 0 0 0.4rem; font-size: 1.85rem; }
-    header p { margin: 0; color: #cbd5e1; max-width: 46rem; }
+    header .wrap, main, footer { max-width: 1100px; margin: 0 auto; }
+    header h1 { margin: 0 0 0.45rem; font-size: 1.9rem; letter-spacing: -0.02em; }
+    header p { margin: 0; color: #cbd5e1; max-width: 48rem; }
     nav {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.6rem 1rem;
-      margin-top: 1.1rem;
-      font-size: 0.9rem;
+      gap: 0.55rem 1.05rem;
+      margin-top: 1.15rem;
+      font-size: 0.88rem;
     }
     nav a { color: #a5b4fc; text-decoration: none; }
     nav a:hover { text-decoration: underline; }
-    main { padding: 1.6rem 1.5rem 3rem; }
+    main { padding: 1.5rem 1.5rem 3rem; }
     section {
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 14px;
-      padding: 1.35rem 1.4rem 1.5rem;
-      margin: 1.1rem 0;
+      padding: 1.35rem 1.4rem 1.55rem;
+      margin: 1.05rem 0;
     }
-    h2 { margin: 0 0 0.75rem; font-size: 1.25rem; }
-    h3 { margin: 1.1rem 0 0.45rem; font-size: 1.02rem; }
+    h2 { margin: 0 0 0.75rem; font-size: 1.28rem; }
+    h3 { margin: 1.15rem 0 0.4rem; font-size: 1.02rem; }
     p, li { color: var(--muted); }
+    strong { color: var(--ink); }
     code, kbd {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.86em;
@@ -72,12 +73,29 @@
       padding: 0.08em 0.35em;
       border-radius: 4px;
     }
-    figure { margin: 0.8rem 0 0.2rem; }
-    figure svg, figure img { width: 100%; height: auto; display: block; border-radius: 10px; background: #f8fafc; }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+    pre code { background: none; color: inherit; padding: 0; }
+    figure { margin: 0.85rem 0 0.25rem; }
+    figure svg, figure img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+    }
     figcaption { font-size: 0.85rem; color: #64748b; margin-top: 0.45rem; }
     table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
     th, td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-    th { color: #0f172a; font-size: 0.8rem; letter-spacing: 0.02em; text-transform: uppercase; }
+    th { color: #0f172a; font-size: 0.78rem; letter-spacing: 0.03em; text-transform: uppercase; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.8rem; }
     .mod {
       border: 1px solid var(--line);
@@ -87,26 +105,40 @@
     }
     .mod h3 { margin: 0 0 0.35rem; }
     .mod .file { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem; }
-    .mermaid { background: #f8fafc; border-radius: 10px; padding: 0.6rem; overflow-x: auto; }
-    footer { padding: 0 1.5rem 2.2rem; color: #94a3b8; font-size: 0.85rem; }
+    .mermaid { background: #f8fafc; border-radius: 10px; padding: 0.75rem; overflow-x: auto; }
+    .callout {
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      border-radius: 10px;
+      padding: 0.75rem 0.9rem;
+      color: #312e81;
+      font-size: 0.92rem;
+    }
+    footer { padding: 0 1.5rem 2.4rem; color: #94a3b8; font-size: 0.85rem; }
+    footer a { color: #6366f1; }
   </style>
 </head>
 <body>
   <header>
     <div class="wrap">
-      <h1>POC <code>pipeline/</code> documentation</h1>
+      <h1>Educational Short Clip Demo</h1>
       <p>
-        How the Gradio demo turns a long educational video into one compilation:
-        timestamped transcript, Ollama nomination, embedding rank, human keep-gate,
-        then a single assembled export.
+        How <code>POC/</code> turns a long lecture into one compilation:
+        WhisperX transcript, Ollama nomination, MiniLM rank, a human keep-gate of 3–5 clips,
+        then ffmpeg assemble with burned captions.
       </p>
       <nav>
         <a href="#overview">Overview</a>
-        <a href="#flow">End-to-end flow</a>
+        <a href="#ui">UI</a>
+        <a href="#flow">Flow</a>
         <a href="#modules">Modules</a>
-        <a href="#data">Data contracts</a>
+        <a href="#nominate">Nominate + rank</a>
+        <a href="#review">Human gate</a>
         <a href="#assemble">Assemble</a>
+        <a href="#captions">Captions</a>
+        <a href="#data">Data</a>
         <a href="#layout">Files</a>
+        <a href="#fallback">Fallbacks</a>
       </nav>
     </div>
   </header>
@@ -115,51 +147,93 @@
     <section id="overview">
       <h2>1. Overview</h2>
       <p>
-        The pipeline is <strong>text-first</strong>. Clips are found from the WhisperX transcript,
+        The pipeline is <strong>text-first</strong>. Clips are found from a timestamped transcript,
         not by scanning pixels. Models only nominate and rank. A human must keep
-        <strong>3–5 on-topic</strong> clips before ffmpeg runs. The shipped artifact is one
-        Demo/YouTube file, not separate raw cuts.
+        <strong>3–5 on-topic</strong> clips before ffmpeg builds the file. The shipped artifact is
+        <strong>one compilation</strong> (intro + clips + captions + takeaway/CTA), not separate shorts.
+        The app does not auto-publish.
       </p>
+      <div class="callout">
+        Design rules: find clips from text → human confirms → then cut.
+        Topic fit beats social-media hook. Source URL lives in <code>post.txt</code>, never as a burned link.
+      </div>
       <figure>
         <img src="assets/architecture.svg" alt="Architecture diagram of the POC pipeline">
-        <figcaption>Figure 1. Module architecture. Dashed line: shared ffmpeg/SRT helpers in <code>utils.py</code>.</figcaption>
+        <figcaption>Figure 1. Module architecture. Dashed line: shared ffmpeg / SRT helpers in <code>utils.py</code>.</figcaption>
       </figure>
     </section>
 
+    <section id="ui">
+      <h2>2. Gradio UI</h2>
+      <p>
+        Entry point: <code>app.py</code>. Four tabs share one in-memory <code>state</code> dict
+        (<code>run_id</code>, transcript, candidates, approved clips, aspect ratio, Ollama model).
+      </p>
+      <figure>
+        <img src="assets/ui-tabs.svg" alt="Four Gradio tabs from input to export">
+        <figcaption>Figure 2. Tab map. Packaging stays locked until Review confirms 3–5 keeps.</figcaption>
+      </figure>
+      <table>
+        <thead><tr><th>Tab</th><th>User does</th><th>Code</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1. Input</td>
+            <td>Upload local mp4, topic, 3–5 learning objectives, source URL, clip length, aspect ratio, Ollama model.</td>
+            <td><code>transcribe()</code> → WhisperX</td>
+          </tr>
+          <tr>
+            <td>2. Transcript + candidates</td>
+            <td>Read timestamps, then <strong>Nominate + rank clips</strong>.</td>
+            <td><code>nominate_candidates</code> → <code>rank_candidates</code> → <code>make_preview</code></td>
+          </tr>
+          <tr>
+            <td>3. Review</td>
+            <td>Play Top 10, edit title / start / end, keep 3–5 on-topic clips, Confirm.</td>
+            <td><code>_read_rows()</code> writes <code>state["approved"]</code></td>
+          </tr>
+          <tr>
+            <td>4. Package + export</td>
+            <td>Intro title + subtitle, takeaway bullets, CTA, aspect ratio, export zip.</td>
+            <td><code>do_export()</code> → <code>export_clips()</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Aspect ratio is <code>Original</code>, <code>16:9</code>, <code>9:16</code>, or <code>1:1</code>.
+        Source video is letterboxed onto that canvas; it is not a center-crop 9:16 short.
+      </p>
+    </section>
+
     <section id="flow">
-      <h2>2. End-to-end flow</h2>
+      <h2>3. End-to-end flow</h2>
       <div class="mermaid">
 flowchart LR
-  A[Local mp4 + topic + learning objectives + source URL] --> B[transcribe.py]
+  A[Local mp4 + topic + objectives + source URL] --> B[transcribe.py]
   B --> C[nominate.py]
   C --> D[rank.py]
-  D --> E{Human review<br/>keep 3–5 on-topic?}
-  E -->|no / 0 or 6+| E
-  E -->|yes| F[cut.py internal raw]
+  D --> E{Human review<br/>keep 3–5?}
+  E -->|no| E
+  E -->|yes| F[cut.py raw clips]
   F --> G[assemble.py]
-  G --> H[export.py compilation.zip]
-  subgraph tools [External tools]
+  G --> H[export.py zip]
+  subgraph tools [Local tools]
     W[WhisperX small]
     O[Ollama qwen2.5]
     M[all-MiniLM-L6-v2]
-    FFmpeg[ffmpeg / ffprobe]
+    FF[ffmpeg / ffprobe]
     P[Pillow cards + caption bars]
   end
   B -.-> W
   C -.-> O
   D -.-> M
-  F -.-> FFmpeg
-  G -.-> FFmpeg
+  F -.-> FF
+  G -.-> FF
   G -.-> P
       </div>
-      <p>
-        Gradio tabs map 1:1 onto this graph: Input → Transcript + candidates → Review → Package + export.
-        Export stays disabled until Confirm selection.
-      </p>
     </section>
 
     <section id="modules">
-      <h2>3. Modules</h2>
+      <h2>4. Modules</h2>
       <div class="mermaid">
 flowchart TB
   APP[app.py Gradio]
@@ -170,7 +244,7 @@ flowchart TB
   C[cut.py]
   A[assemble.py]
   E[export.py]
-  PKG[package.py leftover]
+  PKG[package.py unused]
   APP --> T
   APP --> N
   APP --> R
@@ -186,93 +260,122 @@ flowchart TB
   A --> U
   PKG --> U
       </div>
-
       <div class="grid">
         <article class="mod">
           <div class="file">utils.py</div>
           <h3>Shared I/O</h3>
-          <p>Run folders, JSON/SRT writers, ffmpeg/ffprobe wrappers, even dimensions, font lookup, <code>snap_to_segments</code>, excerpt by time range. Constants: <code>MAX_REVIEW=10</code>, <code>MIN_KEEP=3</code>, <code>MAX_KEEP=5</code>.</p>
+          <p>Run folders, JSON/SRT, ffmpeg wrappers, <code>canvas_size</code>, <code>snap_to_segments</code>, excerpt by range. Constants: <code>MAX_REVIEW=10</code>, <code>MIN_KEEP=3</code>, <code>MAX_KEEP=5</code>.</p>
         </article>
         <article class="mod">
           <div class="file">transcribe.py</div>
           <h3>Speech → timestamps</h3>
-          <p>Lazy-loads WhisperX <code>small</code>. Aligns words when possible. Writes <code>transcript.json</code> and <code>transcript.srt</code>. Device: CUDA if present, otherwise CPU (MPS is avoided).</p>
+          <p>WhisperX <code>small</code>, float32. CUDA if present, else CPU (MPS skipped). Word align when possible. Writes <code>transcript.json</code> / <code>.srt</code>.</p>
         </article>
         <article class="mod">
           <div class="file">nominate.py</div>
           <h3>Broad search</h3>
-          <p><code>ollama.chat(..., format="json")</code> with <code>prompts/nominate_clips.txt</code>. Chunks long transcripts. Snaps times onto real segments. If fewer than 3 clips, sliding-window fallback.</p>
+          <p><code>ollama.chat(..., format="json")</code> with <code>prompts/nominate_clips.txt</code>. Chunks ~9000 chars, 2-sentence overlap. Sliding-window fallback if fewer than 3 clips.</p>
         </article>
         <article class="mod">
           <div class="file">rank.py</div>
           <h3>Topic check</h3>
-          <p>Encodes each candidate against learning objectives with MiniLM. Score = max cosine similarity. Returns Top N for the review tab. Ranking is not the final cut.</p>
+          <p>MiniLM encodes each candidate vs learning objectives. Score = max cosine. Top 10 for review. Ranking is not the final cut.</p>
         </article>
         <article class="mod">
           <div class="file">cut.py</div>
           <h3>Internal cuts</h3>
-          <p><code>cut_clip</code> tries stream-copy, then re-encodes. <code>make_preview</code> always re-encodes for review playback. Raw files stay under <code>work/{run}/raw_clips/</code>.</p>
+          <p><code>make_preview</code> always re-encodes. Export cuts also re-encode (<code>copy=False</code>) so start/end edits are accurate. Files stay under <code>work/{run}/raw_clips/</code>.</p>
         </article>
         <article class="mod">
           <div class="file">assemble.py</div>
           <h3>One timeline</h3>
-          <p>Intro card → normalized raw clips → takeaway/CTA end card. Caption cues are shifted onto the compilation clock and burned with Pillow overlays (this ffmpeg build has no <code>drawtext</code> / <code>subtitles</code>).</p>
+          <p>Intro card → letterboxed clips → takeaway/CTA end card. Word cues shifted onto the compilation clock, burned as Pillow PNG overlays in batches of 8.</p>
         </article>
         <article class="mod">
           <div class="file">export.py</div>
           <h3>Ship the bundle</h3>
-          <p>Orchestrates cut + assemble. Writes <code>compilation.mp4</code>, <code>captions.srt</code>, <code>post.txt</code>, <code>selection.json</code>, then zip. Refuses export unless 3–5 clips are kept.</p>
+          <p>Orchestrates cut + assemble. Writes <code>compilation.mp4</code>, <code>captions.srt</code>, <code>post.txt</code>, <code>selection.json</code>, zip. Refuses unless 3–5 clips.</p>
         </article>
         <article class="mod">
           <div class="file">package.py</div>
-          <h3>Unused by export</h3>
-          <p>Older per-clip packager (9:16, drawtext title/CTA). Current product path does not call it. Kept as leftover from the first MVP.</p>
+          <h3>Unused leftover</h3>
+          <p>Older per-clip packager (9:16 crop, drawtext). Current product path never calls it.</p>
         </article>
       </div>
     </section>
 
-    <section id="data">
-      <h2>4. Data contracts</h2>
-      <h3>Candidate (nominate → rank → review)</h3>
-      <table>
-        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr><td><code>id</code></td><td>Stable id after normalize, <code>c1…cn</code></td></tr>
-          <tr><td><code>start</code> / <code>end</code></td><td>Seconds on the source video, snapped to transcript sentences</td></tr>
-          <tr><td><code>title</code> / <code>takeaway</code> / <code>quote</code> / <code>reason</code></td><td>LLM (or window fallback) text</td></tr>
-          <tr><td><code>score</code></td><td>Added by <code>rank.py</code>, max cosine vs objectives</td></tr>
-          <tr><td><code>excerpt</code></td><td>Transcript slice covering the range</td></tr>
-        </tbody>
-      </table>
-
-      <h3>Human gate</h3>
+    <section id="nominate">
+      <h2>5. Nominate + rank</h2>
       <p>
-        Review judges topic fit, standalone completeness, and “one knowledge point”.
-        A weak opening is not a reject — the user may edit start/end.
-        Confirm copies kept rows into <code>state["approved"]</code> and unlocks Tab 4.
+        <strong>Teaching topic</strong> and <strong>learning objectives</strong> both go into the Ollama user prompt,
+        so nomination is already topic-aware. Rank then scores those candidates against the objectives only.
+        Topic is not re-encoded in MiniLM.
       </p>
+      <figure>
+        <img src="assets/nominate-rank.svg" alt="Ollama nominates, MiniLM ranks">
+        <figcaption>Figure 3. Two models, two jobs. LLM proposes ranges; embeddings only sort.</figcaption>
+      </figure>
+      <div class="mermaid">
+flowchart TB
+  T[WhisperX segments with start/end/text/words]
+  T --> CH["_chunk_segments ~9000 chars<br/>overlap last 2 sentences"]
+  CH --> LLM["Ollama qwen2.5 JSON<br/>topic + objectives + transcript slice"]
+  LLM --> NORM["_normalize_candidates<br/>snap_to_segments, clamp length, dedupe"]
+  NORM --> FB{usable clips ≥ 3?}
+  FB -->|no| WIN["_window_fallback sliding windows"]
+  WIN --> NORM
+  FB -->|yes| EMB["rank.py MiniLM"]
+  EMB --> VEC["candidate text =<br/>title + takeaway + quote + excerpt"]
+  EMB --> OBJ["one vector per learning objective"]
+  VEC --> SCORE["score = max cosine"]
+  OBJ --> SCORE
+  SCORE --> TOP[Top 10 to Review tab]
+      </div>
+      <h3>Why excerpt is needed</h3>
+      <p>
+        Title / takeaway / quote are short LLM strings and can miss wording that matches an objective.
+        <code>excerpt_for_range</code> pulls the real WhisperX sentences inside <code>[start, end]</code>
+        so the embedding sees what was actually said.
+      </p>
+      <h3>Chunk vs clip</h3>
+      <p>
+        A <strong>chunk</strong> is a prompt window (~9000 characters). A <strong>clip</strong> is an LLM-chosen
+        time range that may span several sentences, possibly across the 2-sentence overlap.
+        One chunk can yield several clips.
+      </p>
+    </section>
 
-      <h3>On-disk layout</h3>
-      <table>
-        <thead><tr><th>Path</th><th>When</th><th>Exported?</th></tr></thead>
-        <tbody>
-          <tr><td><code>work/{run}/source.*</code></td><td>After upload</td><td>No</td></tr>
-          <tr><td><code>work/{run}/transcript.json|.srt</code></td><td>After WhisperX</td><td>No</td></tr>
-          <tr><td><code>work/{run}/previews/</code></td><td>Review cards</td><td>No</td></tr>
-          <tr><td><code>work/{run}/raw_clips/</code></td><td>After confirm/export</td><td>No</td></tr>
-          <tr><td><code>work/{run}/assemble/</code></td><td>Intro, norm clips, overlays</td><td>No</td></tr>
-          <tr><td><code>exports/{run}/compilation.mp4</code></td><td>Final video</td><td>Yes</td></tr>
-          <tr><td><code>exports/{run}/captions.srt</code></td><td>Cue list aligned to compilation time</td><td>Yes</td></tr>
-          <tr><td><code>exports/{run}/post.txt</code></td><td>Source URL + takeaway + CTA</td><td>Yes</td></tr>
-        </tbody>
-      </table>
+    <section id="review">
+      <h2>6. Human keep-gate</h2>
+      <p>
+        Review judges: on-topic? standalone? one knowledge point? A weak opening is not a reject —
+        edit start/end instead. Confirm copies kept rows into <code>state["approved"]</code> and unlocks Tab 4.
+      </p>
+      <div class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant R as Review tab
+  participant S as state
+  participant X as do_export
+  U->>R: tick Keep on 3–5 cards
+  R->>S: confirmed = true, approved = rows
+  U->>R: maybe change End time again
+  U->>X: Export compilation
+  X->>R: reread live start/end/title/keep
+  Note over X: no snap_to_segments on export
+  X->>X: cut + assemble + zip
+      </div>
+      <p>
+        Export rereads the live Review form. Last-minute End edits apply without clicking Confirm again.
+        Human-edited times are <strong>not</strong> snapped back to sentence boundaries (that snap only runs during nomination).
+      </p>
     </section>
 
     <section id="assemble">
-      <h2>5. Assemble timeline</h2>
+      <h2>7. Assemble timeline</h2>
       <figure>
-        <img src="assets/compilation-timeline.svg" alt="compilation.mp4 timeline with intro, clips, captions, and end card">
-        <figcaption>Figure 2. Final file structure. Speech captions overlay the clip body only.</figcaption>
+        <img src="assets/compilation-timeline.svg" alt="compilation.mp4 timeline">
+        <figcaption>Figure 4. Intro (title + subtitle) → letterboxed clips with captions → left-aligned takeaway bullets and smaller CTA.</figcaption>
       </figure>
       <div class="mermaid">
 sequenceDiagram
@@ -281,31 +384,99 @@ sequenceDiagram
   participant A as assemble.py
   participant FF as ffmpeg
   participant P as Pillow
-  E->>C: cut each kept range to work/raw_clips
-  C->>FF: -ss start -to end
-  E->>A: assemble_compilation(raws, takeaway, CTA)
+  E->>C: re-encode each kept range to work/raw_clips
+  C->>FF: -ss start -t duration
+  E->>A: assemble_compilation(raws, aspect, intro, takeaway, CTA)
+  A->>A: canvas_size(source, aspect)
   A->>P: intro PNG + end-card PNG
-  A->>FF: turn cards into 1–2s / 2–5s silent videos
-  A->>FF: normalize raw clips to one size/fps/audio
-  A->>A: shift transcript cues by intro + prior clip durations
+  A->>FF: loop stills into 1–2s / 2–6s videos with silent audio
+  A->>FF: scale+pad each clip to canvas, 30fps, AAC
+  A->>FF: concat with re-encode (not -c copy)
+  A->>A: shift word cues onto compilation clock
   A->>P: caption bar PNGs
-  A->>FF: overlay captions in batches of 8
+  A->>FF: overlay in batches of 8, -loop 1
   A-->>E: compilation.mp4 + captions.srt
-  E->>E: post.txt + zip
+  E->>E: post.txt + selection.json + zip
       </div>
+      <h3>Canvas</h3>
       <p>
-        Caption times: <code>compilation_t = intro_duration + sum(previous clips) + (seg.start − clip.start)</code>.
-        The source URL is never burned as a clickable link; it belongs in <code>post.txt</code> / the platform description.
+        <code>canvas_size()</code> letterboxes onto the chosen ratio. For <code>9:16</code> the long side is at least 1920,
+        so a typical lecture becomes <strong>1080×1920</strong> with pillarboxing, not a 360-px-wide card.
+        Intro/end text wraps by <strong>pixel width</strong>, not a fixed character count.
+      </p>
+      <h3>Cards</h3>
+      <table>
+        <thead><tr><th>Card</th><th>Content</th><th>Layout</th></tr></thead>
+        <tbody>
+          <tr><td>Intro 1–2s</td><td>Compilation title + optional subtitle</td><td>Centered on dark canvas</td></tr>
+          <tr><td>End 2–6s</td><td>Heading “Key takeaway”, bullet list, CTA</td><td>Left-aligned body, smaller CTA at bottom</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="captions">
+      <h2>8. Time-aligned captions</h2>
+      <figure>
+        <img src="assets/caption-map.svg" alt="Mapping source word times onto the compilation clock">
+        <figcaption>Figure 5. Source word times are shifted after the intro and previous clips, then scaled to the normalized clip duration.</figcaption>
+      </figure>
+      <pre><code>compilation_t = intro_duration
+               + sum(previous clip durations)
+               + (word.start − clip.start) × (norm_dur / source_dur)</code></pre>
+      <p>
+        Words inside the kept range are grouped until ~38 characters, ~3.2 seconds, or punctuation.
+        If WhisperX alignment failed, whole sentences are used. Intro and end card have no cues.
+        This ffmpeg build has no libass, so captions are <strong>PNG overlays</strong>, not the <code>subtitles</code> filter.
+        Concat always re-encodes and overlays use <code>-loop 1</code> so the first seconds are not blank.
       </p>
     </section>
 
+    <section id="data">
+      <h2>9. Data contracts</h2>
+      <h3>Transcript segment</h3>
+      <pre><code>{
+  "start": 5.915,
+  "end": 8.240,
+  "text": "...",
+  "words": [{"word": "...", "start": ..., "end": ...}]
+}</code></pre>
+      <h3>Candidate / kept clip</h3>
+      <table>
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>Stable id after normalize, <code>c1…cn</code></td></tr>
+          <tr><td><code>start</code> / <code>end</code></td><td>Seconds on the source video</td></tr>
+          <tr><td><code>title</code> / <code>takeaway</code> / <code>quote</code> / <code>reason</code></td><td>LLM (or window fallback)</td></tr>
+          <tr><td><code>source</code></td><td><code>ollama</code> or <code>window</code></td></tr>
+          <tr><td><code>score</code></td><td>Added by rank: max cosine vs objectives</td></tr>
+          <tr><td><code>excerpt</code></td><td>Transcript slice covering the range</td></tr>
+        </tbody>
+      </table>
+      <h3>On disk</h3>
+      <table>
+        <thead><tr><th>Path</th><th>When</th><th>Exported?</th></tr></thead>
+        <tbody>
+          <tr><td><code>work/{run}/source.*</code></td><td>After upload</td><td>No</td></tr>
+          <tr><td><code>work/{run}/transcript.json|.srt</code></td><td>After WhisperX</td><td>No</td></tr>
+          <tr><td><code>work/{run}/previews/</code></td><td>Review cards</td><td>No</td></tr>
+          <tr><td><code>work/{run}/raw_clips/</code></td><td>Export cuts</td><td>No</td></tr>
+          <tr><td><code>work/{run}/assemble/</code></td><td>Intro, norm clips, overlays</td><td>No</td></tr>
+          <tr><td><code>exports/{run}/compilation.mp4</code></td><td>Final video</td><td>Yes</td></tr>
+          <tr><td><code>exports/{run}/captions.srt</code></td><td>Cues on compilation time</td><td>Yes</td></tr>
+          <tr><td><code>exports/{run}/post.txt</code></td><td>Title, takeaway, CTA, source URL, original ranges</td><td>Yes</td></tr>
+          <tr><td><code>exports/{run}/selection.json</code></td><td>Kept clips + pack settings</td><td>Yes</td></tr>
+        </tbody>
+      </table>
+    </section>
+
     <section id="layout">
-      <h2>6. Package layout</h2>
+      <h2>10. Package layout</h2>
       <div class="mermaid">
 flowchart LR
   subgraph POC
     app[app.py]
     prompts[prompts/nominate_clips.txt]
+    docs[docs/pipeline.html]
     subgraph pipeline
       u[utils.py]
       t[transcribe.py]
@@ -314,10 +485,10 @@ flowchart LR
       c[cut.py]
       a[assemble.py]
       e[export.py]
-      p[package.py]
+      p[package.py leftover]
     end
-    work[work/]
-    exports[exports/]
+    work[work/ gitignored]
+    exports[exports/ gitignored]
   end
   app --> pipeline
   n --> prompts
@@ -325,15 +496,46 @@ flowchart LR
   e --> exports
       </div>
       <p>
-        Run from <code>POC/</code> with Ollama up (<code>qwen2.5</code> preferred) and ffmpeg on PATH:
-        <code>python app.py</code>. First WhisperX load is slow. Use a short lecture for demos.
+        Run from <code>POC/</code> with Ollama up and ffmpeg on PATH:
+        <code>python app.py</code>. First WhisperX load is slow. Default CTA:
+        “Full discussion in the original lecture. Link in the description.”
       </p>
+    </section>
+
+    <section id="fallback">
+      <h2>11. Dependencies and fallbacks</h2>
+      <table>
+        <thead><tr><th>Dependency</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td>WhisperX + PyTorch</td><td>ASR + optional word align</td></tr>
+          <tr><td>Ollama + local qwen2.5</td><td>JSON clip nomination</td></tr>
+          <tr><td>sentence-transformers MiniLM</td><td>Objective similarity</td></tr>
+          <tr><td>Pillow</td><td>Intro, end card, caption bars</td></tr>
+          <tr><td>ffmpeg / ffprobe</td><td>Cut, letterbox, concat, overlay</td></tr>
+          <tr><td>Gradio</td><td>UI</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Failure</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td>No ffmpeg / ffprobe</td><td>Immediate <code>RuntimeError</code></td></tr>
+          <tr><td>WhisperX align fails</td><td>Sentence-level segments only</td></tr>
+          <tr><td>Ollama chunk fails</td><td>Record error, continue other chunks</td></tr>
+          <tr><td>LLM clips &lt; 3</td><td>Sliding-window fallback, then normalize again</td></tr>
+          <tr><td>Keep count not 3–5</td><td>Refuse confirm / export</td></tr>
+          <tr><td>No audio on a clip</td><td>Insert silent <code>anullsrc</code></td></tr>
+        </tbody>
+      </table>
     </section>
   </main>
   <footer>
-    Generated from <code>POC/pipeline/</code> for the COS80029 educational short-clip Gradio demo.
-    SVG: <a href="assets/architecture.svg">architecture.svg</a> ·
-    <a href="assets/compilation-timeline.svg">compilation-timeline.svg</a>
+    Generated from current <code>POC/</code> source for the COS80029 educational short-clip Gradio demo.
+    SVG:
+    <a href="assets/architecture.svg">architecture</a> ·
+    <a href="assets/ui-tabs.svg">ui-tabs</a> ·
+    <a href="assets/nominate-rank.svg">nominate-rank</a> ·
+    <a href="assets/compilation-timeline.svg">timeline</a> ·
+    <a href="assets/caption-map.svg">caption-map</a>
   </footer>
 </body>
 </html>

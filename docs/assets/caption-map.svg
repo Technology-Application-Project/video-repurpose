@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 340" role="img" aria-labelledby="cm-title cm-desc">
+  <title id="cm-title">Caption time mapping</title>
+  <desc id="cm-desc">Word times from the source lecture are shifted onto the compilation clock after the intro and previous clips.</desc>
+  <rect width="1100" height="340" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700" fill="#0f172a">How captions stay time-aligned</text>
+  <text x="32" y="56" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#64748b">compilation_t = intro + sum(previous clips) + (word.start  clip.start) × scale</text>
+
+  <text x="32" y="92" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="700" fill="#334155">Source lecture time</text>
+  <rect x="32" y="104" width="1036" height="44" rx="8" fill="#e2e8f0"/>
+  <rect x="280" y="112" width="320" height="28" rx="6" fill="#2563eb"/>
+  <text x="440" y="131" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff">kept clip  [clip.start & clip.end]</text>
+  <text x="48" y="131" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">0s</text>
+  <text x="1036" y="131" text-anchor="end" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">lecture end</text>
+
+  <text x="32" y="180" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="700" fill="#334155">Compilation time</text>
+  <rect x="32" y="192" width="1036" height="52" rx="8" fill="#e2e8f0"/>
+  <rect x="40" y="200" width="110" height="36" rx="6" fill="#1e293b"/>
+  <text x="95" y="223" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">intro</text>
+  <rect x="158" y="200" width="90" height="36" rx="6" fill="#64748b"/>
+  <text x="203" y="223" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">clip 1</text>
+  <rect x="256" y="200" width="320" height="36" rx="6" fill="#2563eb"/>
+  <text x="416" y="223" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">this clip + caption overlay</text>
+  <rect x="584" y="200" width="220" height="36" rx="6" fill="#1e40af"/>
+  <text x="694" y="223" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">later clips</text>
+  <rect x="812" y="200" width="246" height="36" rx="6" fill="#059669"/>
+  <text x="935" y="223" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fff">end card (no captions)</text>
+
+  <path d="M440 140 L440 168 L416 192" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="440" cy="140" r="4" fill="#2563eb"/>
+
+  <text x="32" y="278" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#334155">Words are grouped (~38 chars or ~3.2s). If alignment failed, sentence segments are used instead.</text>
+  <text x="32" y="300" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#334155">PNG overlays use -loop 1 so the bar stays visible for between(t, start, end). Concat is re-encoded, not stream-copied.</text>
+  <text x="32" y="322" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#64748b">Homebrew ffmpeg here has no libass, so the subtitles filter is not used.</text>
+</svg>

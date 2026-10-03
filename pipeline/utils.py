@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WORK_ROOT = ROOT / "work"
 EXPORT_ROOT = ROOT / "exports"
 MAX_REVIEW = 10
-MIN_KEEP = 3
+MIN_KEEP = 1
 MAX_KEEP = 5
 
 FONT_CANDIDATES = [

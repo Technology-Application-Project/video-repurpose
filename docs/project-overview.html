@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technology stack, features and workflow of the Educational Short Clip Demo.">
+<title>Educational Short Clip Demo | Project Overview</title>
+<style>
+ :root{--ink:#202d28;--muted:#556760;--green:#145f4c;--gold:#d7ac40;--line:#d5dfda}
+ *{box-sizing:border-box;letter-spacing:0}html{scroll-behavior:smooth}body{margin:0;background:#f7f9f8;color:var(--ink);font:16px/1.65 "Avenir Next","Segoe UI",sans-serif}
+ .wrap{max-width:1120px;margin:auto;padding-inline:32px}header{border-top:7px solid var(--green);border-bottom:1px solid var(--line);background:repeating-linear-gradient(90deg,transparent 0,transparent 79px,#145f4c07 79px,#145f4c07 80px);padding-top:24px}
+ .eyebrow,.label{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--green)}h1{font:700 44px/1.15 Palatino,Georgia,serif;margin:20px 0 16px;max-width:780px}.lede{font-size:19px;color:var(--muted);max-width:820px}
+ nav{display:flex;flex-wrap:wrap;gap:12px 26px;padding:14px 0 24px;font-size:14px}a{color:var(--green);text-underline-offset:4px}a:focus-visible,summary:focus-visible{outline:3px solid var(--gold);outline-offset:4px}
+ .facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line);gap:20px;padding-block:24px}.facts strong{display:block;font-size:23px}.facts span{font-size:13px;color:var(--muted)}
+ section{padding-block:36px;border-bottom:1px solid var(--line)}h2{font-size:26px;line-height:1.3;margin:0 0 12px}h2 span{font:14px Menlo,monospace;color:var(--green);margin-right:14px}h3{font-size:18px;line-height:1.4;margin:0 0 8px}p{margin:8px 0 16px}.muted,figcaption{color:var(--muted)}
+ figure{margin:24px 0 0}.diagram,.table-scroll{overflow:auto}.diagram{border:1px solid var(--line);border-radius:6px;background:#fff}.diagram svg{display:block;width:100%;min-width:780px;height:auto}figcaption{font-size:13px;margin-top:10px}
+ table{width:100%;border-collapse:collapse;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:14px 18px 14px 0;text-align:left;vertical-align:top}th{color:var(--green);font-size:12px;text-transform:uppercase}td:first-child{font-weight:600}
+ .features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;margin-top:24px}article{border-top:3px solid var(--green);padding-top:16px}article:nth-child(3n+2){border-color:var(--gold)}article:nth-child(3n){border-color:#a34e48}article p{color:var(--muted);font-size:14px}
+ .columns{display:grid;grid-template-columns:1fr 1fr;gap:38px}.columns>*{min-width:0}.notice{border-left:4px solid var(--gold);padding:12px 18px;background:#faf3df;margin-top:24px}.notice p{margin:0}
+ .artifact{display:grid;grid-template-columns:180px 1fr;gap:18px;border-bottom:1px solid var(--line);padding:10px 0;font-size:14px}ul{padding-left:20px}li{margin:6px 0}code{font:13px/1.6 Menlo,Consolas,monospace;overflow-wrap:anywhere}pre{background:#e9f0ed;border-radius:4px;padding:18px;overflow:auto}pre code{white-space:pre;overflow-wrap:normal}summary{cursor:pointer;color:var(--green);font-weight:600}details{margin-top:22px}footer{font-size:13px;color:var(--muted);padding-block:26px 38px}footer a{margin-right:20px}
+ @media(max-width:700px){.wrap{padding-inline:20px}h1{font-size:32px}.lede{font-size:17px}.facts{grid-template-columns:1fr 1fr}.facts strong{font-size:20px}.features,.columns{grid-template-columns:1fr;gap:24px}h2{font-size:23px}section{padding-block:28px}.artifact{grid-template-columns:1fr;gap:4px}table{min-width:650px}}
+ @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+ @media print{body{background:#fff;font-size:11px}.wrap{max-width:none;padding:0}nav,details{display:none}h1{font-size:30px}section{padding-block:20px}.diagram,.table-scroll{overflow:visible}.diagram svg,table{min-width:0}article,tr,.artifact{break-inside:avoid}a{color:inherit}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+ <div class="eyebrow">Project brief / Local AI + video / 02 October 2026</div>
+ <h1>Educational Short Clip Demo</h1>
+ <p class="lede">Turn a lecture into an audience-focused short compilation, with source-grounded clip suggestions, a narrated opening, captions and evidence-backed human review.</p>
+ <nav aria-label="Sections"><a href="#workflow">Workflow</a><a href="#stack">Tech stack</a><a href="#features">Features</a><a href="#outputs">Outputs</a><a href="#review">Review &amp; roadmap</a><a href="#run">Run locally</a></nav>
+</div></header>
+<main class="wrap">
+ <div class="facts" aria-label="Project at a glance"><div><strong>1-5 clips</strong><span>Human-confirmed source excerpts</span></div><div><strong>45-120 sec</strong><span>Generated compilation budget</span></div><div><strong>5 audiences</strong><span>General to advanced learners</span></div><div><strong>Local-first</strong><span>Python app + local model service</span></div></div>
+ <section id="workflow">
+  <h2><span>01</span>From lecture to reviewed short</h2>
+  <p class="muted">Gradio coordinates the Python pipeline. AI proposes content; the application validates structure and timing; humans select clips and approve the result.</p>
+  <figure><div class="diagram" tabindex="0" role="region" aria-label="Workflow diagram, horizontally scrollable on small screens">
+   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 350" role="img" aria-labelledby="diagram-title diagram-desc">
+    <title id="diagram-title">Lecture processing and review workflow</title><desc id="diagram-desc">Upload, transcribe, nominate and rank, confirm clips, generate storyboard and preview, approve storyboard, export, and assess the final compilation.</desc>
+    <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#728c81"/></marker></defs>
+    <g fill="none" stroke="#728c81" stroke-width="2" marker-end="url(#arrow)"><path d="M234 93H282"/><path d="M489 93H537"/><path d="M744 93H792"/><path d="M900 144V180H132V209"/><path d="M234 263H282"/><path d="M489 263H537"/><path d="M744 263H792"/></g>
+    <g font-family="Avenir Next,Segoe UI,sans-serif">
+     <g fill="#eef5f1" stroke="#b8cec3"><rect x="30" y="42" width="204" height="102" rx="6"/><rect x="285" y="42" width="204" height="102" rx="6"/><rect x="540" y="42" width="204" height="102" rx="6"/><rect x="30" y="212" width="204" height="102" rx="6"/><rect x="540" y="212" width="204" height="102" rx="6"/></g>
+     <g fill="#fcf5df" stroke="#d8bd69"><rect x="795" y="42" width="214" height="102" rx="6"/><rect x="285" y="212" width="204" height="102" rx="6"/><rect x="795" y="212" width="214" height="102" rx="6"/></g>
+     <g fill="#145f4c" font-size="12" font-weight="700"><text x="48" y="68">INPUT</text><text x="303" y="68">WHISPERX</text><text x="558" y="68">OLLAMA</text><text x="813" y="68">HUMAN SELECTION</text><text x="48" y="238">AI + MEDIA PIPELINE</text><text x="303" y="238">HUMAN CHECK</text><text x="558" y="238">FFMPEG + FILES</text><text x="813" y="238">HUMAN + RUBRIC</text></g>
+     <g fill="#202d28" font-size="17" font-weight="600"><text x="48" y="96">Upload lecture</text><text x="303" y="96">Transcribe</text><text x="558" y="96">Nominate + rank</text><text x="813" y="96">Keep + confirm</text><text x="48" y="266">Storyboard + preview</text><text x="303" y="266">Approve storyboard</text><text x="558" y="266">Export compilation</text><text x="813" y="266">Assess + final review</text></g>
+     <g fill="#556760" font-size="12"><text x="48" y="120">Video, audience, duration</text><text x="303" y="120">Speech + timestamps</text><text x="558" y="120">Evidence + context checks</text><text x="813" y="120">1 to 5 complete excerpts</text><text x="48" y="290">Title voice, joins, ending</text><text x="303" y="290">Named preview review</text><text x="558" y="290">MP4, SRT, text, metadata</text><text x="813" y="290">Evidence + publication gates</text></g>
+    </g>
+   </svg>
+  </div><figcaption>Green stages process content. Gold stages require human decisions. Export creates a local artifact; it does not publish it.</figcaption></figure>
+  <details><summary>Mermaid diagram source</summary><pre><code>flowchart LR
+  A[Local video + audience] --> B[WhisperX transcription]
+  B --> C[Ollama nomination + editorial ranking]
+  C --> D[Human confirms 1-5 clips]
+  D --> E[Automatic storyboard + narrated preview]
+  E --> F[Human storyboard approval]
+  F --> G[FFmpeg export + artifact bundle]
+  G --> H[Evidence-backed assessment]
+  H --> I[Human final review]
+  I --> J{All publication gates pass?}
+  J -->|Yes| K[Locally marked approved]
+  J -->|No| L[Blocked: revise or finish review]</code></pre></details>
+ </section>
+ <section id="stack">
+  <h2><span>02</span>Technology stack</h2>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Technology stack table"><table><thead><tr><th scope="col">Layer</th><th scope="col">Technology</th><th scope="col">Responsibility</th></tr></thead><tbody>
+   <tr><td>Application</td><td>Python 3.11+ / Gradio</td><td>Five-tab UI, queued callbacks, session state and workflow validation.</td></tr>
+   <tr><td>Speech recognition</td><td>WhisperX / PyTorch</td><td>Local transcription with the small ASR model and word alignment when available; segment timing is the fallback.</td></tr>
+   <tr><td>Language intelligence</td><td>Ollama / Qwen2.5 default</td><td>Source-grounded concepts, clip nomination, editorial estimates, metadata and structured storyboards.</td></tr>
+   <tr><td>Current ranking</td><td>Python editorial rules</td><td>Audience fit 40%, completeness 35%, educational value 25%; context gates and overlap filtering.</td></tr>
+   <tr><td>Legacy similarity</td><td>sentence-transformers</td><td>all-MiniLM-L6-v2 embeddings for older callers without an audience; not the main audience-aware path.</td></tr>
+   <tr><td>Video and audio</td><td>FFmpeg / ffprobe</td><td>Cutting, normalization, concatenation, audio encoding, caption burn-in and measured duration checks.</td></tr>
+   <tr><td>Graphics</td><td>Pillow</td><td>Pixel-fitted title cards, transition graphics, ending screens and caption images.</td></tr>
+   <tr><td>Intro voice</td><td>macOS say / Samantha</td><td>Offline title narration at 175 words/minute. The intro extends when the voice needs more time.</td></tr>
+   <tr><td>Storage and audit</td><td>Local files / JSON / SHA-256</td><td>Versioned exports, selection provenance and artifact-bound assessments; no database required.</td></tr>
+   <tr><td>Verification</td><td>unittest / FFmpeg integration tests</td><td>Selection, approval, real rendering, narration, timing, export bundles and assessment validation.</td></tr>
+  </tbody></table></div>
+  <p class="muted">Local-first does not mean a fully offline installation: packages, ASR/alignment weights and Ollama models may need downloading. Narrated intros currently depend on macOS and the installed Samantha voice.</p>
+ </section>
+ <section id="features">
+  <h2><span>03</span>Implemented features</h2>
+  <div class="features">
+   <article><span class="label">Understand</span><h3>Audience-aware selection</h3><p>General audience, beginners, students, professionals and advanced learners. Source concepts guide nomination without requiring a manually written teaching topic.</p></article>
+   <article><span class="label">Inspect</span><h3>Evidence-backed clip review</h3><p>Preview clips, inspect timestamped quotes, edit boundaries and keep 1-5 excerpts. Context-risk candidates and redundant overlaps are filtered.</p></article>
+   <article><span class="label">Compose</span><h3>Automatic storyboard</h3><p>Confirmation generates the opening, joins, synthesis and reflection question, then renders a preview. Claims, timing and text remain editable.</p></article>
+   <article><span class="label">Present</span><h3>Standalone narrated intro</h3><p>A centered title on a full-screen dark green card with a gold accent. A synthetic voice reads only the title before original lecture speech begins.</p></article>
+   <article><span class="label">Package</span><h3>Multi-format captioned video</h3><p>Original, landscape 16:9, portrait 9:16 and square 1:1 formats. Cuts, overlays or dividers connect clips; captions follow the measured timeline.</p></article>
+   <article><span class="label">Govern</span><h3>Revision-aware review</h3><p>Named storyboard approval, non-overwriting exports, weighted final assessment and hash-based stale-review detection. Edits invalidate approval.</p></article>
+  </div><div class="notice"><p><strong>Quality boundary:</strong> model estimates and valid citations do not prove truth. Missing assessments remain unassessed rather than receiving invented passing scores.</p></div>
+ </section>
+ <section id="outputs">
+  <h2><span>04</span>Architecture and deliverables</h2><div class="columns">
+   <div><h3>Modular Python pipeline</h3><p><a href="../app.py">app.py</a> orchestrates the UI. Modules in <a href="../pipeline/README.md">pipeline/</a> own transcription, nomination, editorial review, ranking, storyboard validation, cutting, assembly, export and assessment.</p><p>Intermediate data lives in <code>work/</code>. Final artifacts live in <code>exports/RUN_ID/EXPORT_ID/</code>. Each export is a new version.</p><p class="muted">The source URL is attribution text, not a download input. There is no automatic social publishing or authenticated approval service. Reviewer names are local declarations.</p></div>
+   <div><h3>Export bundle</h3><div class="artifact"><code>compilation.mp4</code><span>Final video, burned-in captions and narrated opening.</span></div><div class="artifact"><code>captions.srt</code><span>Lecture subtitles on the final timeline.</span></div><div class="artifact"><code>post.txt</code><span>Post copy, attribution, selected ranges and reflection.</span></div><div class="artifact"><code>selection.json</code><span>Clips, audience, storyboard, approval and timeline.</span></div><div class="artifact"><code>compilation.zip</code><span>Bundle of the four export artifacts above.</span></div><div class="artifact"><code>assessments/</code><span>Versioned review JSON, assessment JSON and Markdown. The original ZIP stays unchanged.</span></div></div>
+  </div>
+ </section>
+ <section id="review">
+  <h2><span>05</span>Assessment: current vs. proposed</h2><div class="columns">
+   <div><span class="label">Implemented today</span><h3>Human review, automatic calculation</h3><p>The scorer validates evidence and calculates ratings. It does not independently watch, listen to or assess the video.</p><ul><li>Source fidelity: <strong>25%</strong></li><li>Audience fit and learning value: <strong>25%</strong></li><li>Standalone coherence: <strong>20%</strong></li><li>Captions: <strong>15%</strong></li><li>Audio and visuals: <strong>15%</strong></li></ul><p>Every dimension needs evidence and at least 3/4. Claims, context, caption readability and human final review must all pass. Incomplete reviews stay blocked.</p></div>
+   <div><span class="label">Proposed / not implemented</span><h3>Auto-assessment, one final human approval</h3><p>Collect technical measurements and AI editorial estimates automatically, then present an evidence-backed report for final review.</p><ul><li>Decoding, timing, caption and audio measurements.</li><li>Editorial comparison with surrounding source context.</li><li>Separate AI assessment and human approval records.</li><li>One final approval after watching and listening; unresolved checks still block approval.</li></ul><p><strong>Current behavior is different:</strong> storyboard approval and final assessment remain separate. Text-only AI cannot certify visual readability or listening quality.</p></div>
+  </div>
+ </section>
+ <section id="run"><h2><span>06</span>Run and verify</h2><div class="columns">
+  <div><h3>Local application</h3><p>Requires Python, FFmpeg/ffprobe, a running Ollama service and its model; macOS Samantha for narrated openings.</p><pre><code>pip install -r requirements.txt
+ollama pull qwen2.5
+python app.py</code></pre></div>
+  <div><h3>Regression coverage</h3><p>Unit tests use controlled model responses. Media tests exercise encoding, narration and timing; they are not editorial certification.</p><pre><code>python -m unittest discover -s tests -q
+
+RUN_MEDIA_TESTS=1 python -m unittest discover -s tests -q</code></pre></div>
+ </div></section>
+</main>
+<footer class="wrap"><p>Educational Short Clip Demo / Proof of concept / Implementation snapshot: 02 October 2026</p><a href="../README.md">Project README</a><a href="post-generation-rubric.md">Assessment rubric</a><a href="../requirements.txt">Dependencies</a></footer>
+</body>
+</html>
