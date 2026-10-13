@@ -239,7 +239,12 @@ def nominate_candidates(
     *,
     target_audience: str | None = None,
     lecture_context: dict | None = None,
+    tracker=None,
 ) -> list[dict]:
+    """With `tracker`, uses 3 steps when `target_audience` is set, otherwise 2."""
+    from pipeline.progress import NO_PROGRESS
+
+    tracker = tracker or NO_PROGRESS
     if not segments:
         raise RuntimeError("No transcript segments to nominate from.")
 
@@ -250,7 +255,10 @@ def nominate_candidates(
     )
     collected: list[dict] = []
     last_error = None
-    for chunk in _chunk_segments(segments):
+    chunks = _chunk_segments(segments)
+    tracker.step("Nominating clips with Ollama")
+    for done, chunk in enumerate(chunks):
+        tracker.count(done, len(chunks), "chunks")
         user_prompt = (
             f"Topic: {topic}\n"
             f"Learning objectives:\n- "
@@ -290,7 +298,17 @@ def nominate_candidates(
     if target_audience:
         from pipeline.editorial import review_candidate
 
-        candidates = [review_candidate(model, candidate, segments, target_audience, objectives,
-                                       lecture_context or {}, min_s, max_s, duration) for candidate in candidates]
-    return [_describe_candidate(model, candidate, segments) if candidate.get("editorial_status") != "rejected"
-            else candidate for candidate in candidates]
+        tracker.step("Editorial review of each candidate")
+        reviewed = []
+        for done, candidate in enumerate(candidates):
+            tracker.count(done, len(candidates), "clips")
+            reviewed.append(review_candidate(model, candidate, segments, target_audience, objectives,
+                                             lecture_context or {}, min_s, max_s, duration))
+        candidates = reviewed
+    tracker.step("Writing clip titles and takeaways")
+    described = []
+    for done, candidate in enumerate(candidates):
+        tracker.count(done, len(candidates), "clips")
+        described.append(_describe_candidate(model, candidate, segments)
+                         if candidate.get("editorial_status") != "rejected" else candidate)
+    return described

@@ -18,6 +18,7 @@ venv/
 
 # App / OS
 .gradio/
+models/
 .DS_Store
 *.egg-info/
 .pytest_cache/

@@ -4,6 +4,7 @@ import re
 import shutil
 from pathlib import Path
 
+from pipeline.progress import NO_PROGRESS, StepProgress
 from pipeline.storyboard import storyboard_timeline, validate_storyboard
 from pipeline.utils import canvas_size, ffmpeg_bin, find_font, has_audio, media_duration, media_size, run_cmd, write_srt
 
@@ -252,7 +253,11 @@ def _render_card_image(
 def _synthesize_title(title: str, dest: Path) -> Path:
     executable = shutil.which("say")
     if executable is None:
-        raise RuntimeError("Intro narration requires macOS speech synthesis (say).")
+        from pipeline.narrate import engine, speak_title
+
+        if engine() is None:
+            raise RuntimeError("Intro narration requires a local speech synthesizer (macOS say, Windows SAPI or espeak-ng).")
+        return speak_title(title, dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     text_path = dest.with_suffix(".txt")
     text_path.write_text(title, encoding="utf-8")
@@ -337,7 +342,7 @@ def make_end_card(
     return _card_video(png, dest, width, height, seconds, fps)
 
 
-def concat_mp4s(parts: list[Path], dest: Path) -> Path:
+def concat_mp4s(parts: list[Path], dest: Path, on_fraction=None) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     listing = dest.with_suffix(".txt")
     lines = []
@@ -372,7 +377,9 @@ def concat_mp4s(parts: list[Path], dest: Path) -> Path:
             "-avoid_negative_ts",
             "make_zero",
             str(dest),
-        ]
+        ],
+        on_fraction=on_fraction,
+        duration=sum(media_duration(part) for part in parts) if on_fraction else None,
     )
     return dest
 
@@ -484,7 +491,7 @@ def _caption_png(dest: Path, text: str, canvas_w: int, canvas_h: int) -> Path:
 
 
 def burn_captions(video: Path, cues: list[dict], dest: Path, width: int, height: int, work: Path,
-                  *, graphics: list[dict] | None = None) -> Path:
+                  *, graphics: list[dict] | None = None, on_fraction=None) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     cues = [*cues, *(graphics or [])]
     if not cues:
@@ -499,7 +506,10 @@ def burn_captions(video: Path, cues: list[dict], dest: Path, width: int, height:
     batch_size = 8
     audio = has_audio(video)
     margin = max(24, int(height * 0.045))
+    passes = -(-len(cues) // batch_size)
     for batch_i in range(0, len(cues), batch_size):
+        done_passes = batch_i // batch_size
+        pass_progress = (lambda f, d=done_passes: on_fraction((d + f) / passes)) if on_fraction else None
         batch = cues[batch_i : batch_i + batch_size]
         out = cap_dir / f"burn_{batch_i:03d}.mp4"
         cmd = [ffmpeg_bin(), "-y", "-i", str(current)]
@@ -536,7 +546,7 @@ def burn_captions(video: Path, cues: list[dict], dest: Path, width: int, height:
             "-shortest",
             str(out),
         ]
-        run_cmd(cmd)
+        run_cmd(cmd, on_fraction=pass_progress, duration=duration)
         current = out
     if dest != current:
         if dest.exists():
@@ -593,12 +603,19 @@ def _storyboard_panel(dest: Path, sections: list[tuple[str, str]], width: int, h
 
 
 def _assemble_storyboard(raw_clips: list[Path], dest: Path, clips: list[dict], segments: list[dict],
-                         storyboard: dict, width: int, height: int, work: Path, srt_path: Path | None) -> Path:
+                         storyboard: dict, width: int, height: int, work: Path, srt_path: Path | None,
+                         tracker: StepProgress = NO_PROGRESS) -> Path:
     validate_storyboard(storyboard, clips)
     if len(raw_clips) != len(clips):
         raise ValueError("Storyboard and media clip counts differ.")
-    normalized = [_normalize_clip(raw, work / f"norm_{index:02d}.mp4", width, height)
-                  for index, raw in enumerate(raw_clips)]
+    tracker.step("Normalizing clips")
+    normalized = []
+    for index, raw in enumerate(raw_clips):
+        tracker.count(index, len(raw_clips), "clips")
+        normalized.append(_normalize_clip(raw, work / f"norm_{index:02d}.mp4", width, height))
+    tracker.step("Rendering title cards")
+    card_total = sum(1 for item in storyboard_timeline(clips, [1.0] * len(clips), storyboard) if item["kind"] != "clip")
+    cards_done = 0
     durations = [media_duration(path) for path in normalized]
     timeline = storyboard_timeline(clips, durations, storyboard)
     parts, graphics, clip_offsets = [], [], []
@@ -631,6 +648,8 @@ def _assemble_storyboard(raw_clips: list[Path], dest: Path, clips: list[dict], s
             ending = storyboard["ending"]
             sections = [("Key takeaway", "credit"), (ending["takeaway"], "title"),
                         (ending["question"], "question"), (ending["credit"], "credit"), (ending["cta"], "credit")]
+        tracker.count(cards_done, card_total, "cards")
+        cards_done += 1
         png = _storyboard_panel(work / f"card_{index}.png", sections, width, height,
                     opening=item["kind"] == "opening")
         narration = None
@@ -645,14 +664,19 @@ def _assemble_storyboard(raw_clips: list[Path], dest: Path, clips: list[dict], s
         for later in timeline[index + 1:]:
             later["start"] += difference
         parts.append(card)
-    bare = concat_mp4s(parts, work / "concat_bare.mp4")
+    tracker.step("Joining clips and cards")
+    bare = concat_mp4s(parts, work / "concat_bare.mp4", on_fraction=tracker.fraction)
     cues = compilation_cues(clips, segments, 0, durations, clip_offsets=clip_offsets)
     if srt_path is not None:
         write_srt(cues, srt_path)
     from pipeline.utils import save_json
 
     save_json(work / "timeline.json", timeline)
-    return burn_captions(bare, cues, dest, width, height, work, graphics=graphics)
+    tracker.step("Burning captions and overlays")
+    return burn_captions(bare, cues, dest, width, height, work, graphics=graphics, on_fraction=tracker.fraction)
+
+
+ASSEMBLE_STEPS = 4
 
 
 def assemble_compilation(
@@ -672,7 +696,9 @@ def assemble_compilation(
     aspect_ratio: str = "Original",
     storyboard: dict | None = None,
     preview: bool = False,
+    tracker: StepProgress = NO_PROGRESS,
 ) -> Path:
+    """Uses ASSEMBLE_STEPS steps of `tracker`."""
     if not raw_clips:
         raise RuntimeError("No raw clips to assemble.")
     src_w, src_h = media_size(raw_clips[0])
@@ -684,8 +710,10 @@ def assemble_compilation(
     work.mkdir(parents=True, exist_ok=True)
     if storyboard is not None:
         return _assemble_storyboard(raw_clips, dest, clips or [], segments or [], storyboard,
-                                    width, height, work, srt_path)
+                                    width, height, work, srt_path, tracker)
 
+    tracker.step("Rendering title cards")
+    tracker.count(0, 2, "cards")
     intro = make_intro_card(
         work / "intro.mp4",
         title=intro_title,
@@ -694,13 +722,7 @@ def assemble_compilation(
         height=height,
         seconds=intro_seconds,
     )
-    parts = [intro]
-    clip_durs = []
-    for i, raw in enumerate(raw_clips, 1):
-        normalized = _normalize_clip(raw, work / f"norm_{i:02d}.mp4", width, height)
-        parts.append(normalized)
-        clip_durs.append(media_duration(normalized))
-
+    tracker.count(1, 2, "cards")
     end = make_end_card(
         work / "end_card.mp4",
         takeaway=end_takeaway or "Review the selected points, then watch the full source.",
@@ -709,13 +731,23 @@ def assemble_compilation(
         height=height,
         seconds=end_seconds,
     )
+    parts = [intro]
+    clip_durs = []
+    tracker.step("Normalizing clips")
+    for i, raw in enumerate(raw_clips, 1):
+        tracker.count(i - 1, len(raw_clips), "clips")
+        normalized = _normalize_clip(raw, work / f"norm_{i:02d}.mp4", width, height)
+        parts.append(normalized)
+        clip_durs.append(media_duration(normalized))
     parts.append(end)
 
+    tracker.step("Joining clips and cards")
     bare = work / "concat_bare.mp4"
-    concat_mp4s(parts, bare)
+    concat_mp4s(parts, bare, on_fraction=tracker.fraction)
 
     cues = compilation_cues(clips or [], segments or [], media_duration(intro), clip_durs)
     if srt_path is not None:
         write_srt(cues, srt_path)
 
-    return burn_captions(bare, cues, dest, width, height, work)
+    tracker.step("Burning captions")
+    return burn_captions(bare, cues, dest, width, height, work, on_fraction=tracker.fraction)

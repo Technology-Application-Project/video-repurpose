@@ -3,8 +3,10 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
 import shutil
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,15 +16,19 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipeline.assemble import assemble_compilation
+from pipeline.assemble import ASSEMBLE_STEPS, assemble_compilation
 from pipeline.cut import cut_clip, make_preview
 from pipeline.assess import DIMENSIONS, GATES, RUBRIC_VERSION, artifact_hashes, assess_export, assessment_markdown, export_context, score_review
 from pipeline.contracts import selection_revision, validate_range
-from pipeline.export import DEFAULT_CTA, export_clips
+from pipeline.export import DEFAULT_CTA, EXPORT_STEPS, export_clips
 from pipeline.editorial import EDITORIAL_VERSION, infer_lecture_context
 from pipeline.nominate import list_ollama_models, nominate_candidates
 from pipeline.rank import rank_candidates
-from pipeline.transcribe import transcribe_video
+from pipeline.narrate import list_voices
+from pipeline.progress import StepProgress
+from pipeline.remake import REMAKE_MODES, REMAKE_STYLES, remake_markdown, remake_steps, remake_transcript
+from pipeline.remake_video import BACKGROUNDS as REMAKE_BACKGROUNDS, REMAKE_VIDEO_STEPS, render_remake_video
+from pipeline.transcribe import TRANSCRIBE_STEPS, transcribe_video
 from pipeline.storyboard import (TRANSITION_MODES, draft_storyboard, generate_storyboard,
                                 storyboard_revision, validate_compilation_duration, validate_storyboard)
 from pipeline.utils import (
@@ -31,6 +37,7 @@ from pipeline.utils import (
     MAX_REVIEW,
     MIN_KEEP,
     as_video_path,
+    ensure_browser_playable,
     excerpt_for_range,
     ffmpeg_bin,
     media_duration,
@@ -92,6 +99,7 @@ def empty_state() -> dict:
         "approved": [],
         "confirmed": False,
         "approval_revision": None,
+        "remake": None,
     }
 
 
@@ -163,6 +171,91 @@ def invalidate_range_score():
     return "Range changed. Editorial score and evidence unavailable for the edited excerpt; re-nominate to rescore."
 
 
+def gradio_cache_dir() -> Path:
+    return Path(os.environ.get("GRADIO_TEMP_DIR") or Path(tempfile.gettempdir()) / "gradio").resolve()
+
+
+def clear_gradio_cache(keep: str | Path | None = None) -> int:
+    """Delete Gradio's upload/temp cache, except the folder holding `keep` (the new upload)."""
+    cache = gradio_cache_dir()
+    if not cache.is_dir():
+        return 0
+    keep_path = Path(keep).resolve() if keep else None
+    removed = 0
+    for entry in cache.iterdir():
+        if keep_path and (keep_path == entry or entry in keep_path.parents):
+            continue
+        try:
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+            removed += 1
+        except OSError:
+            pass  # file still open (e.g. being streamed on Windows); try again next upload
+    return removed
+
+
+def make_upload_playable(video, progress=gr.Progress()):
+    path = as_video_path(video)
+    if not path:
+        return gr.update(), "Upload a video, then transcribe."
+    tracker = StepProgress(progress, 2)
+    tracker.step("Checking video format")
+
+    def converting(fraction):
+        if tracker.index == 1:
+            tracker.step("Converting video for browser playback")
+        tracker.fraction(fraction)
+
+    try:
+        playable, action = ensure_browser_playable(path, on_fraction=converting)
+    except RuntimeError as exc:
+        raise gr.Error(f"Could not prepare the video for playback: {exc}")
+    if action is None:
+        return gr.update(), "Video ready. Fill in the settings, then transcribe."
+    return playable, f"Video converted for browser playback ({action}). Fill in the settings, then transcribe."
+
+
+def reset_for_new_upload(video, progress=gr.Progress()):
+    """New upload: clear the Gradio cache, then reset the session state and all downstream outputs."""
+    clear_gradio_cache(keep=as_video_path(video))
+    playable, status = make_upload_playable(video, progress)
+    review_reset = []
+    for _ in range(MAX_REVIEW):
+        review_reset.extend([gr.update(visible=False), None, "", "", "", "", None, None, False])
+    pack_reset = []
+    for _ in range(MAX_KEEP):
+        pack_reset.extend([gr.update(visible=False), "", ""])
+    return (
+        playable,
+        status,
+        empty_state(),
+        "_Transcript will appear here._",
+        "Run transcription first.",
+        None,
+        f"**Kept: 0 / {MIN_KEEP}–{MAX_KEEP} required**",
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        "Nominate clips first.",
+        *review_reset,
+        *pack_reset,
+        "Confirm clips before drafting a storyboard.",
+        None,
+        False,
+        f"Confirm {MIN_KEEP}–{MAX_KEEP} clips before export.",
+        None,
+        "",
+        None,
+        "_Run transcription, then click **AI Remake**._",
+        gr.update(value=None, visible=False),
+        gr.update(interactive=False),
+        "Run AI Remake first. The video uses the Aspect ratio from tab 1.",
+        None,
+        gr.update(value=None, visible=False),
+    )
+
+
 def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_ratio, model, state, progress=gr.Progress()):
     state = dict(state or empty_state())
     path = as_video_path(video)
@@ -174,7 +267,8 @@ def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_r
     if not objectives:
         raise gr.Error("Enter 3–5 learning objectives, one per line.")
 
-    progress(0.05, desc="Checking ffmpeg")
+    tracker = StepProgress(progress, 1 + TRANSCRIBE_STEPS)
+    tracker.step("Saving source video")
     ffmpeg_bin()
     run_id = new_run_id()
     work = run_dir(run_id)
@@ -182,8 +276,7 @@ def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_r
     stored = work / f"source{suffix}"
     shutil.copy2(path, stored)
 
-    progress(0.2, desc="Transcribing with WhisperX (first run is slow)")
-    transcript = transcribe_video(str(stored), work)
+    transcript = transcribe_video(str(stored), work, tracker)
     segments = transcript.get("segments") or []
     if not segments:
         raise gr.Error("WhisperX produced an empty transcript.")
@@ -272,15 +365,17 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
     segments = state["transcript"]["segments"]
     selected_model = model or state.get("model") or "qwen2.5"
     audience = state.get("target_audience")
-    if audience and (not state.get("lecture_context") or state["lecture_context"].get("status") == "unavailable"
-                     or state["lecture_context"].get("model") != selected_model):
-        progress(0.05, desc="Extracting source-grounded lecture concepts")
-        state["lecture_context"] = infer_lecture_context(selected_model, segments)
+    needs_context = bool(audience) and (not state.get("lecture_context")
+                                        or state["lecture_context"].get("status") == "unavailable"
+                                        or state["lecture_context"].get("model") != selected_model)
+    tracker = StepProgress(progress, int(needs_context) + (3 if audience else 2) + 2)
+    if needs_context:
+        tracker.step("Finding the lecture's key concepts")
+        state["lecture_context"] = infer_lecture_context(selected_model, segments, tracker)
     context = state.get("lecture_context") or {}
     concepts = context.get("concepts", [])
     if concepts:
         state["topic"] = "; ".join(item["label"] for item in concepts[:3])
-    progress(0.15, desc="Ollama nominating clips")
     duration = media_duration(state["source_video"])
     candidates = nominate_candidates(
         model=model or state.get("model") or "qwen2.5",
@@ -292,12 +387,14 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
         duration=duration,
         target_audience=audience,
         lecture_context=context,
+        tracker=tracker,
     )
-    progress(0.55, desc="Ranking against selection goals")
+    tracker.step("Ranking against selection goals")
     ranked = rank_candidates(candidates, state["objectives"], segments, target_audience=audience)
-    progress(0.7, desc="Building previews")
+    tracker.step("Building preview clips")
     work = Path(state["work"])
-    for cand in ranked:
+    for done, cand in enumerate(ranked):
+        tracker.count(done, len(ranked), "clips")
         preview = work / "previews" / f"{cand['id']}.mp4"
         make_preview(state["source_video"], cand["start"], cand["end"], preview)
         cand["preview_path"] = str(preview)
@@ -521,7 +618,6 @@ def do_export(
     if not (MIN_KEEP <= len(clips) <= MAX_KEEP):
         raise gr.Error(f"Keep {MIN_KEEP}–{MAX_KEEP} on-topic clips before export.")
 
-    progress(0.2, desc="Assembling compilation")
     _, posts, zip_path, compilation = export_clips(
         run_id=state["run_id"],
         source_video=state["source_video"],
@@ -538,6 +634,7 @@ def do_export(
         aspect_ratio=(aspect_ratio or state.get("aspect_ratio") or "Original"),
         storyboard=storyboard,
         storyboard_approval=storyboard_approval,
+        tracker=StepProgress(progress, EXPORT_STEPS),
         selection_context={
             "target_audience": state.get("target_audience"),
             "audience_profile_version": state.get("audience_profile_version"),
@@ -625,7 +722,7 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
         return
     yield state, "Generating storyboard from all selected excerpts...", None, False, gr.update(interactive=False), *unchanged
     try:
-        progress(0.05, desc="Generating storyboard with Ollama")
+        StepProgress(progress).step("Generating storyboard with Ollama")
         draft = generate_storyboard(model or state.get("model") or "qwen2.5", clips,
                                     state.get("target_audience", DEFAULT_AUDIENCE), state.get("source_url") or "")
         result = draft_package_storyboard(state, aspect_ratio, generated=draft)
@@ -701,14 +798,17 @@ def preview_package_storyboard(state, *values, progress=gr.Progress()):
     preview = work / "preview.mp4"
     if not preview.exists():
         raw_clips = []
+        tracker = StepProgress(progress, 1 + ASSEMBLE_STEPS)
+        tracker.step("Cutting clips from the source")
         for index, clip in enumerate(state["approved"]):
-            progress((index + 1) / (len(state["approved"]) + 2), desc="Preparing storyboard preview")
+            tracker.count(index, len(state["approved"]), "clips")
             raw_clips.append(cut_clip(state["source_video"], clip["start"], clip["end"],
                                       work / f"raw_{index}.mp4", copy=False))
         pending = work / "pending.mp4"
         assemble_compilation(raw_clips, pending, intro_title="", clips=state["approved"],
                              segments=state["transcript"]["segments"], storyboard=draft, preview=True,
-                             aspect_ratio=draft["aspect_ratio"], work=work / "assemble", srt_path=work / "captions.srt")
+                             aspect_ratio=draft["aspect_ratio"], work=work / "assemble", srt_path=work / "captions.srt",
+                             tracker=tracker)
         pending.replace(preview)
     if "duration_budget" in draft:
         validate_compilation_duration(media_duration(preview))
@@ -824,6 +924,60 @@ def invalidate_ui_assessment():
     return "Review changed. Score pending recalculation.", []
 
 
+def run_ai_remake(state, model, style, mode, target_words, progress=gr.Progress()):
+    state = state or empty_state()
+    transcript = state.get("transcript") or {}
+    segments = transcript.get("segments") or []
+    if not segments:
+        raise gr.Error("Run transcription first.")
+    try:
+        result = remake_transcript(
+            model or state.get("model") or "qwen2.5",
+            segments,
+            style,
+            mode,
+            int(target_words),
+            state.get("target_audience") or DEFAULT_AUDIENCE,
+            Path(state["work"]) if state.get("work") else None,
+            tracker=StepProgress(progress, remake_steps(segments)),
+        )
+    except ValueError as exc:
+        raise gr.Error(str(exc))
+    state = dict(state)
+    state["remake"] = result
+    path = result.get("markdown_path")
+    return (state, remake_markdown(result), gr.update(value=path, visible=bool(path)),
+            gr.update(interactive=True), "Script ready. Pick a voice and background, then make the video.")
+
+
+def load_remake_voices():
+    voices = list_voices()
+    return gr.update(choices=voices, value=voices[0] if voices else None)
+
+
+def make_remake_video(state, voice, background, aspect_ratio, rate, progress=gr.Progress()):
+    state = state or empty_state()
+    remake = state.get("remake")
+    if not remake:
+        raise gr.Error("Run AI Remake first.")
+    if background == REMAKE_BACKGROUNDS[0] and not state.get("source_video"):
+        raise gr.Error("Source footage is unavailable. Run transcription, or choose title cards.")
+    work = Path(state["work"]) / "remake_video" if state.get("work") else EXPORT_ROOT / f"remake_{new_run_id()}"
+    if work.exists():
+        shutil.rmtree(work, ignore_errors=True)
+    try:
+        result = render_remake_video(
+            remake, work, source_video=state.get("source_video"), aspect_ratio=aspect_ratio,
+            background=background, voice=voice, rate=int(rate),
+            tracker=StepProgress(progress, REMAKE_VIDEO_STEPS),
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise gr.Error(f"Remake video failed: {exc}") from exc
+    status = (f"Narrated video ready: {result['duration']:.1f}s, {result['width']}x{result['height']}. "
+              "Synthetic voice reading an AI rewrite; check it against the source before publishing.")
+    return result["video"], gr.update(value=result["srt"], visible=True), status
+
+
 def build_app():
     with gr.Blocks(title="Educational Short Clip Demo") as demo:
         state = gr.State(empty_state())
@@ -854,13 +1008,56 @@ def build_app():
 
             with gr.Tab("2. Transcript + candidates"):
                 transcript_view = gr.Markdown("_Transcript will appear here._")
-                nominate_btn = gr.Button("Nominate + rank clips", variant="primary")
-                cand_status = gr.Markdown("Run transcription first.")
-                cand_table = gr.Dataframe(
-                    headers=["id", "editorial estimate / 100", "score status", "start", "end", "title", "takeaway"],
-                    label="Ranked candidates (read-only)",
-                    interactive=False,
-                    wrap=True,
+                tab2_mode = gr.Radio(
+                    ["Clip candidates", "AI Remake"],
+                    value="Clip candidates",
+                    label="Mode",
+                    info="AI Remake is optional: it rewrites the transcript as text and does not affect clips or export.",
+                )
+                with gr.Group(visible=True) as clip_mode_group:
+                    nominate_btn = gr.Button("Nominate + rank clips", variant="primary")
+                    cand_status = gr.Markdown("Run transcription first.")
+                    cand_table = gr.Dataframe(
+                        headers=["id", "editorial estimate / 100", "score status", "start", "end", "title", "takeaway"],
+                        label="Ranked candidates (read-only)",
+                        interactive=False,
+                        wrap=True,
+                    )
+                with gr.Group(visible=False) as remake_mode_group:
+                    with gr.Row():
+                        remake_mode = gr.Dropdown(list(REMAKE_MODES), value="Full remake", label="What to do")
+                        remake_style = gr.Dropdown(list(REMAKE_STYLES), value="Storyteller", label="Style")
+                        remake_words = gr.Slider(80, 800, value=250, step=10, label="Target length (words)")
+                    remake_btn = gr.Button("AI Remake", variant="primary")
+                    remake_view = gr.Markdown("_Run transcription, then click **AI Remake**._")
+                    remake_file = gr.File(label="Download remake (.md)", visible=False)
+                    gr.Markdown("### Narrated video\n"
+                                "Reads the remake script with a local voice, "
+                                "with the title card, section headings and captions styled like the clip compilation.")
+                    with gr.Row():
+                        remake_voice = gr.Dropdown([], label="Voice")
+                        remake_background = gr.Radio(REMAKE_BACKGROUNDS, value=REMAKE_BACKGROUNDS[0], label="Background")
+                        remake_rate = gr.Slider(-5, 5, value=0, step=1, label="Speaking rate")
+                    remake_video_btn = gr.Button("Make narrated video", variant="primary", interactive=False)
+                    remake_video_status = gr.Markdown("Run AI Remake first. The video uses the Aspect ratio from tab 1.")
+                    remake_video = gr.Video(label="Narrated remake video", interactive=False)
+                    remake_srt = gr.File(label="Captions (.srt)", visible=False)
+                tab2_mode.change(
+                    lambda choice: (gr.update(visible=choice == "Clip candidates"), gr.update(visible=choice == "AI Remake")),
+                    [tab2_mode],
+                    [clip_mode_group, remake_mode_group],
+                )
+                remake_btn.click(
+                    run_ai_remake,
+                    [state, model, remake_style, remake_mode, remake_words],
+                    [state, remake_view, remake_file, remake_video_btn, remake_video_status],
+                    concurrency_id="audience_pipeline",
+                )
+                remake_video_btn.click(
+                    make_remake_video,
+                    [state, remake_voice, remake_background, aspect_ratio, remake_rate],
+                    [remake_video, remake_srt, remake_video_status],
+                    concurrency_id="audience_pipeline",
                 )
 
             with gr.Tab("3. Review"):
@@ -1029,6 +1226,14 @@ def build_app():
             review_outputs.extend(
                 [groups[index], previews[index], cids[index], titles[index], takeaways[index], metas[index], starts[index], ends[index], keeps[index]]
             )
+        upload_reset_outputs = [video, input_status, state, transcript_view, cand_status, cand_table, kept_md,
+                                confirm_btn, export_btn, review_status, *review_outputs]
+        for i in range(MAX_KEEP):
+            upload_reset_outputs.extend([pack_groups[i], pack_titles[i], pack_notes[i]])
+        upload_reset_outputs += [storyboard_status, storyboard_preview, storyboard_attested, export_status,
+                                 compilation_video, post_view, zip_file, remake_view, remake_file,
+                                 remake_video_btn, remake_video_status, remake_video, remake_srt]
+        video.upload(reset_for_new_upload, [video], upload_reset_outputs, concurrency_id="audience_pipeline")
         transcribe_btn.click(
             transcribe_for_audience,
             [video, target_audience, source_url, min_s, max_s, aspect_ratio, model, state],
@@ -1092,6 +1297,7 @@ def build_app():
             concurrency_id="audience_pipeline",
         ).success(refresh_assessment_exports, [compilation_video], [assessment_export])
         demo.load(ping_stack, [model], [model, stack_status])
+        demo.load(load_remake_voices, [], [remake_voice])
         demo.load(refresh_assessment_exports, [], [assessment_export])
     return demo
 

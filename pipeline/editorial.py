@@ -77,7 +77,7 @@ def _evidence(item: dict, segments: list[dict]) -> dict:
     return {"start": start, "end": end, "quote": quote}
 
 
-def infer_lecture_context(model: str, segments: list[dict]) -> dict:
+def infer_lecture_context(model: str, segments: list[dict], tracker=None) -> dict:
     from pipeline.nominate import _chunk_segments
 
     concepts = []
@@ -85,7 +85,9 @@ def infer_lecture_context(model: str, segments: list[dict]) -> dict:
     failures = []
     indexed = [{**segment, "segment_id": index} for index, segment in enumerate(segments)]
     chunks = _chunk_segments(indexed)
-    for chunk in chunks:
+    for done, chunk in enumerate(chunks):
+        if tracker is not None:
+            tracker.count(done, len(chunks), "chunks")
         try:
             result = _ask(model,
                 'Identify up to four central concepts in this lecture excerpt. Each must be supported by the cited segment. '

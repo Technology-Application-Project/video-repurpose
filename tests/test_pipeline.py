@@ -23,8 +23,10 @@ class StoryboardTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "title.aiff"
-            with patch("pipeline.assemble.shutil.which", return_value=None):
-                with self.assertRaisesRegex(RuntimeError, "macOS speech"):
+            with patch("pipeline.assemble.shutil.which", return_value=None), patch(
+                "pipeline.narrate.engine", return_value=None
+            ):
+                with self.assertRaisesRegex(RuntimeError, "speech synthesizer"):
                     _synthesize_title("Title", output)
             with patch("pipeline.assemble.shutil.which", return_value="/usr/bin/say"), patch(
                 "pipeline.assemble.run_cmd"

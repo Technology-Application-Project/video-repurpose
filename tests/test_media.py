@@ -16,7 +16,7 @@ from pipeline.utils import ffmpeg_bin, format_timestamp, media_duration
 
 @unittest.skipUnless(os.environ.get("RUN_MEDIA_TESTS") == "1", "Set RUN_MEDIA_TESTS=1 for ffmpeg integration tests")
 class MediaTests(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("say"), "Requires macOS speech synthesis")
+    @unittest.skipUnless(__import__("pipeline.narrate", fromlist=["engine"]).engine(), "Requires a local speech synthesizer")
     def test_narrated_opening_finishes_before_speech_and_captions(self):
         import json
         from array import array
@@ -38,7 +38,7 @@ class MediaTests(unittest.TestCase):
                     segments=[{"start": 0, "end": 1, "text": "Source speech."}], storyboard=draft,
                     work=work, srt_path=work / "captions.srt", preview=preview)
                 timeline = json.loads((work / "timeline.json").read_text())
-                narration_seconds = media_duration(work / "intro_narration.aiff")
+                narration_seconds = media_duration(next(work.glob("intro_narration.*[!t]")))
                 opening_seconds = timeline[0]["duration"]
                 self.assertGreater(opening_seconds, 3)
                 self.assertGreaterEqual(opening_seconds + 0.04, narration_seconds + 0.4)

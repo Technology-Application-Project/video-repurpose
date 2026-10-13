@@ -3,4 +3,5 @@ ollama
 sentence-transformers
 whisperx
 pillow
-
+kokoro-onnx
+soundfile

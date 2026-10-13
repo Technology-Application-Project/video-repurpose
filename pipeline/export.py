@@ -6,7 +6,8 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from pipeline.assemble import assemble_compilation
+from pipeline.assemble import ASSEMBLE_STEPS, assemble_compilation
+from pipeline.progress import NO_PROGRESS, StepProgress
 from pipeline.cut import cut_clip
 from pipeline.contracts import validate_range
 from pipeline.storyboard import validate_compilation_duration, validate_storyboard
@@ -42,6 +43,9 @@ def compilation_post(clips: list[dict], source_url: str, intro_title: str, takea
     )
 
 
+EXPORT_STEPS = 1 + ASSEMBLE_STEPS
+
+
 def export_clips(
     *,
     run_id: str,
@@ -60,7 +64,9 @@ def export_clips(
     selection_context: dict | None = None,
     storyboard: dict | None = None,
     storyboard_approval: dict | None = None,
+    tracker: StepProgress = NO_PROGRESS,
 ) -> tuple[list[str], str, Path, str]:
+    """Uses EXPORT_STEPS steps of `tracker`."""
     if not (MIN_KEEP <= len(clips) <= MAX_KEEP):
         raise RuntimeError(f"Keep {MIN_KEEP}–{MAX_KEEP} on-topic clips before export.")
     if storyboard is not None:
@@ -83,7 +89,9 @@ def export_clips(
     with tempfile.TemporaryDirectory(prefix=".pending-", dir=parent) as temporary:
         staging = Path(temporary)
         raw_paths: list[Path] = []
+        tracker.step("Cutting clips from the source")
         for index, clip in enumerate(clips, 1):
+            tracker.count(index - 1, len(clips), "clips")
             raw = export_work / "raw_clips" / f"clip_{index}.mp4"
             cut_clip(source_video, clip["start"], clip["end"], raw, copy=False)
             raw_paths.append(raw)
@@ -107,6 +115,7 @@ def export_clips(
             work=export_work / "assemble",
             aspect_ratio=aspect_ratio,
             storyboard=storyboard,
+            tracker=tracker,
         )
         if storyboard is not None and "duration_budget" in storyboard:
             validate_compilation_duration(media_duration(staging / "compilation.mp4"))

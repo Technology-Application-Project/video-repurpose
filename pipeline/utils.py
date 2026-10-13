@@ -4,9 +4,10 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,6 +23,9 @@ FONT_CANDIDATES = [
     "/Library/Fonts/Arial.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
     "/System/Library/Fonts/PingFang.ttc",
+    "C:/Windows/Fonts/arial.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]
 
 
@@ -107,12 +111,30 @@ def ffprobe_bin() -> str:
     return path
 
 
-def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        err = (result.stderr or result.stdout or "command failed").strip()
-        raise RuntimeError(err[-2000:])
-    return result
+def run_cmd(cmd: list[str], *, on_fraction: Callable[[float], None] | None = None,
+            duration: float | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a command. For ffmpeg with `on_fraction` and the output `duration`, report the
+    share of the output encoded so far, read from ffmpeg's own -progress stream."""
+    if on_fraction is None or not duration or duration <= 0:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "command failed").strip()
+            raise RuntimeError(err[-2000:])
+        return result
+    cmd = [cmd[0], "-progress", "pipe:1", "-nostats", *cmd[1:]]
+    with tempfile.TemporaryFile() as stderr:
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=stderr, text=True)
+        for line in process.stdout:
+            key, _, value = line.strip().partition("=")
+            if key in ("out_time_us", "out_time_ms") and value.isdigit():  # both are microseconds
+                on_fraction(min(1.0, int(value) / 1_000_000 / duration))
+        process.wait()
+        stderr.seek(0)
+        err = stderr.read().decode("utf-8", errors="replace")
+    if process.returncode != 0:
+        raise RuntimeError((err or "command failed").strip()[-2000:])
+    on_fraction(1.0)
+    return subprocess.CompletedProcess(cmd, process.returncode, "", err)
 
 
 def media_duration(path: str | Path) -> float:
@@ -149,6 +171,66 @@ def media_size(path: str | Path) -> tuple[int, int]:
     width_s, height_s = result.stdout.strip().split("x")
     width, height = int(width_s), int(height_s)
     return width - (width % 2), height - (height % 2)
+
+
+PLAYABLE_VIDEO_CODECS = {"h264"}
+PLAYABLE_PIX_FMTS = {"yuv420p", "yuvj420p"}
+PLAYABLE_AUDIO_CODECS = {"aac", "mp3"}
+
+
+def probe_streams(path: str | Path) -> tuple[dict | None, dict | None]:
+    """Return (first video stream, first audio stream) as ffprobe dicts."""
+    result = run_cmd(
+        [
+            ffprobe_bin(),
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,codec_name,pix_fmt",
+            "-of",
+            "json",
+            str(path),
+        ]
+    )
+    streams = json.loads(result.stdout or "{}").get("streams") or []
+    video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    return video, audio
+
+
+def ensure_browser_playable(path: str | Path,
+                            on_fraction: Callable[[float], None] | None = None) -> tuple[str, str | None]:
+    """Re-encode/remux a video to H.264 + AAC mp4 if browsers can't play it.
+
+    Returns (path to use, short description of what was done or None if untouched).
+    """
+    path = Path(path)
+    video, audio = probe_streams(path)
+    if video is None:
+        raise RuntimeError("The uploaded file has no video stream.")
+    video_ok = video.get("codec_name") in PLAYABLE_VIDEO_CODECS and video.get("pix_fmt") in PLAYABLE_PIX_FMTS
+    audio_ok = audio is None or audio.get("codec_name") in PLAYABLE_AUDIO_CODECS
+    container_ok = path.suffix.lower() in {".mp4", ".m4v"}
+    if video_ok and audio_ok and container_ok:
+        return str(path), None
+
+    output = path.with_name(f"{path.stem}_playable.mp4")
+    cmd = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(path), "-map", "0:v:0", "-map", "0:a:0?"]
+    if video_ok:
+        cmd += ["-c:v", "copy"]
+    else:
+        cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
+    cmd += ["-c:a", "copy"] if audio_ok else ["-c:a", "aac", "-b:a", "160k"]
+    cmd += ["-movflags", "+faststart", str(output)]
+    run_cmd(cmd, on_fraction=on_fraction, duration=media_duration(path) if on_fraction else None)
+
+    if not video_ok:
+        action = f"re-encoded {video.get('codec_name')}/{video.get('pix_fmt')} video to H.264"
+    elif not audio_ok:
+        action = f"converted {audio.get('codec_name')} audio to AAC"
+    else:
+        action = f"remuxed {path.suffix or 'file'} to mp4"
+    return str(output), action
 
 
 def even_dim(value: int) -> int:
