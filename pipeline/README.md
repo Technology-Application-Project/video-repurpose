@@ -1,5 +1,24 @@
 # `pipeline/` 代码解释
 
+## Current Workflow (Version 2)
+
+The active Gradio workflow uses Researcher, General public and Kids (ages 8-12),
+with a measured 30-60 second final duration (60-90 for earlier drafts). The historical walkthrough below
+describes the original prototype; current behavior is:
+
+`transcribe -> local nominate/review -> automatic clip selection (or human keep) -> approve cloud estimate -> fit -> Gemini storyboard -> measured narration -> generated media -> preview -> human approve -> export -> assess`
+
+- `storyboard.py`: shared audience profiles, duration policy and evidence-validated text.
+- `fit.py`: bounded complete-sentence fitting and local review of changed ranges.
+- `cloud.py`: Google SDK, cost consent, capped request ledger and video-job resume.
+- `media.py`: verified assets, narration measurement, optional licensed SFX and ducked mix.
+- `assemble.py`: audience styling, source footage and captions on the measured timeline.
+- `export.py`: approved asset reuse, provenance inventory and atomic export/ZIP.
+- `assess.py`: recorded duration policy, media hashes and separate narration-stem checks.
+
+See the root README for setup, licensing and tests. Old exports remain unchanged;
+old working drafts require audience selection and regeneration.
+
 `POC/pipeline/` 是教育短视频 Demo 的核心处理包：把一节长讲座视频变成 **3–5 条主题相关片段**，再拼成一条带片头、字幕和片尾 CTA 的合辑。
 
 Gradio 入口在 `POC/app.py`。本目录只负责算法与媒体处理，不包含 UI。
@@ -57,7 +76,7 @@ Gradio 入口在 `POC/app.py`。本目录只负责算法与媒体处理，不包
 
 ## 2. 一次运行的目录
 
-每次点击「Run transcription」会生成 10 位 hex `run_id`：
+每次点击「Run transcription」会生成 `run_id`：`{YYYYMMDD-HHMM}_{源文件名slug}_{hex4}`（例如 `20261012-0915_liyn5xwvx44-first-10-min_7d75`），按时间排序且能看出源视频：
 
 ```text
 POC/
@@ -68,12 +87,13 @@ POC/
     previews/{id}.mp4       # 审片用预览
     raw_clips/{id}.mp4      # 确认后的原始裁切（不导出）
     assemble/               # 合辑中间文件（intro / norm / captions）
-  exports/{run_id}/
+  exports/{run_id}/{YYYYMMDD-HHMMSS}_{audience}_{aspect}_{hex4}/   # 每次导出一个目录，如 20261012-091830_kids_16x9_5f4d
     compilation.mp4
     captions.srt
     post.txt
     selection.json
-    compilation.zip
+    compilation-{同名}.zip
+  exports/latest -> 最近一次导出目录（符号链接）
 ```
 
 常量在 `utils.py`：

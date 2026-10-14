@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "description": "Curated instrumental beds, three per audience profile. Instrumental only, no vocals.",
+  "license": "CC0-1.0",
+  "redistributable": true,
+  "tracks": [
+    {
+      "file": "researcher/still-water.mp3",
+      "audience": "Researcher",
+      "title": "Still Water",
+      "bpm": 68,
+      "seconds": 64.0,
+      "note": "Slow minor pad for sober, evidence-led narration.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "researcher/slow-orbit.mp3",
+      "audience": "Researcher",
+      "title": "Slow Orbit",
+      "bpm": 64,
+      "seconds": 64.0,
+      "note": "Darker and wider; suits methods and limitations.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "researcher/quiet-field.mp3",
+      "audience": "Researcher",
+      "title": "Quiet Field",
+      "bpm": 72,
+      "seconds": 64.0,
+      "note": "Slightly brighter minor; suits an open research question.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "general-public/open-road.mp3",
+      "audience": "General public",
+      "title": "Open Road",
+      "bpm": 100,
+      "seconds": 64.0,
+      "note": "Warm and forward; the default for everyday explainers.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "general-public/clear-morning.mp3",
+      "audience": "General public",
+      "title": "Clear Morning",
+      "bpm": 96,
+      "seconds": 64.0,
+      "note": "Gentler pace for longer explanations.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "general-public/bright-steps.mp3",
+      "audience": "General public",
+      "title": "Bright Steps",
+      "bpm": 104,
+      "seconds": 64.0,
+      "note": "Highest energy of the three; good for a surprising result.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "kids/wonder-walk.mp3",
+      "audience": "Kids",
+      "title": "Wonder Walk",
+      "bpm": 108,
+      "seconds": 64.0,
+      "note": "Major and settled; the safe default for ages 8-12.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "kids/puzzle-time.mp3",
+      "audience": "Kids",
+      "title": "Puzzle Time",
+      "bpm": 112,
+      "seconds": 64.0,
+      "note": "A little springier; suits a question-led opening.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    },
+    {
+      "file": "kids/tiny-discovery.mp3",
+      "audience": "Kids",
+      "title": "Tiny Discovery",
+      "bpm": 104,
+      "seconds": 64.0,
+      "note": "Softest of the three; good for a calm takeaway.",
+      "license": "CC0-1.0",
+      "source": "tools/generate_music.py in this repository",
+      "credit": "Original synthesized composition; no third-party recording or sample.",
+      "redistributable": true
+    }
+  ]
+}

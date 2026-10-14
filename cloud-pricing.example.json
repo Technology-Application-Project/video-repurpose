@@ -1,0 +1,19 @@
+{
+  "currency": "USD",
+  "text_provider": "google",
+  "music_source": "library",
+  "price_source": "https://ai.google.dev/gemini-api/docs/pricing",
+  "checked_at": "",
+  "models": {
+    "text": "",
+    "image": "",
+    "video": "",
+    "music": ""
+  },
+  "usd_per_request": {
+    "text": null,
+    "image": null,
+    "video": null,
+    "music": null
+  }
+}

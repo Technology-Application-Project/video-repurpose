@@ -84,28 +84,27 @@ def _chunk_segments(segments: list[dict], max_chars: int = 9000) -> list[list[di
 
 
 def _window_fallback(segments: list[dict], min_s: float, max_s: float) -> list[dict]:
+    from pipeline.editorial import _sentence_end
+
     if not segments:
         return []
     candidates = []
     i = 0
     idx = 1
-    while i < len(segments) and len(candidates) < 12:
+    while i < len(segments):
+        if i and not _sentence_end(segments[i - 1]["text"]):
+            i += 1
+            continue
         start = float(segments[i]["start"])
-        texts = []
         j = i
-        end = start
-        while j < len(segments) and (float(segments[j]["end"]) - start) < min_s:
-            texts.append(segments[j]["text"].strip())
-            end = float(segments[j]["end"])
+        last = None
+        while j < len(segments) and round(float(segments[j]["end"]) - start, 3) <= max_s:
+            if round(float(segments[j]["end"]) - start, 3) >= min_s and _sentence_end(segments[j]["text"]):
+                last = j
             j += 1
-        while j < len(segments) and (float(segments[j]["end"]) - start) <= max_s:
-            texts.append(segments[j]["text"].strip())
-            end = float(segments[j]["end"])
-            j += 1
-            if end - start >= min_s:
-                break
-        if end - start >= min_s * 0.7:
-            quote = " ".join(texts).strip()
+        if last is not None:
+            end = float(segments[last]["end"])
+            quote = " ".join(segment["text"].strip() for segment in segments[i:last + 1]).strip()
             candidates.append(
                 {
                     "id": f"w{idx}",
@@ -113,13 +112,17 @@ def _window_fallback(segments: list[dict], min_s: float, max_s: float) -> list[d
                     "end": end,
                     "title": quote[:72] + ("..." if len(quote) > 72 else ""),
                     "takeaway": quote[:180],
-                    "reason": "Fallback window from transcript (Ollama returned too few clips).",
+                    "reason": "Sentence-bounded transcript alternative; editorial and human review required.",
                     "quote": quote[:200],
                     "source": "window",
                 }
             )
             idx += 1
-        i = j if j > i else i + 1
+            i = last + 1
+        else:
+            i += 1
+    if len(candidates) > 12:
+        candidates = [candidates[index * (len(candidates) - 1) // 11] for index in range(12)]
     return candidates
 
 
@@ -263,34 +266,90 @@ def nominate_candidates(
                 "target_audience": target_audience, "audience_goals": objectives,
                 "lecture_concepts": lecture_context or {},
             }, ensure_ascii=False)
-        try:
-            response = ollama.chat(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                format="json",
-            )
-            message = response["message"] if isinstance(response, dict) else response.message
-            content = message["content"] if isinstance(message, dict) else message.content
-            parsed = _parse_json(content)
-            collected.extend(parsed.get("candidates") or [])
-        except Exception as exc:
-            last_error = exc
+        properties = {key: {"type": "string"} for key in ("id", "title", "takeaway", "reason", "quote")}
+        properties.update(start={"type": "number", "enum": [segment["start"] for segment in chunk]},
+                          end={"type": "number", "enum": [segment["end"] for segment in chunk]})
+        schema = {"type": "object", "required": ["candidates"], "additionalProperties": False,
+                  "properties": {"candidates": {"type": "array", "maxItems": 12, "items": {
+                      "type": "object", "required": list(properties), "additionalProperties": False,
+                      "properties": properties}}}}
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        for attempt in range(2):
+            try:
+                response = ollama.chat(model=model, messages=messages, format=schema,
+                                       options={"temperature": 0, "num_ctx": 16384})
+                message = response["message"] if isinstance(response, dict) else response.message
+                content = message["content"] if isinstance(message, dict) else message.content
+                parsed = _parse_json(content)
+                raw = parsed.get("candidates") or []
+                normalized = _normalize_candidates(raw, chunk, min_s, max_s, duration)
+                if raw and not normalized:
+                    messages.extend([{"role": "assistant", "content": content}, {"role": "user", "content": (
+                        f"None of these ranges passed validation. Each clip must span {min_s}-{max_s} seconds "
+                        "AFTER snapping to segment boundaries. Select multiple consecutive segments to include "
+                        "a complete explanation, not an isolated sentence or introduction. Check end minus start. "
+                        "Return a corrected candidates object; one good clip is enough. Do not invent timestamps.")}])
+                    continue
+                collected.extend(normalized)
+                break
+            except Exception as exc:
+                last_error = exc
 
     candidates = _normalize_candidates(collected, segments, min_s, max_s, duration)
-    if len(candidates) < 3:
+    if not candidates:
         candidates.extend(_window_fallback(segments, min_s, max_s))
         candidates = _normalize_candidates(candidates, segments, min_s, max_s, duration)
 
     if not candidates:
         detail = f" Last Ollama error: {last_error}" if last_error else ""
-        raise RuntimeError("Ollama returned no usable clip candidates." + detail)
+        raise RuntimeError(
+            f"Ollama returned no usable clip candidates within {min_s}-{max_s} seconds. "
+            "No complete transcript window fits those limits. Increase Max clip seconds "
+            "(for example, to 60-90 seconds) and rerun nomination without retranscribing, "
+            "or use a source containing a longer complete explanation." + detail
+        )
     if target_audience:
         from pipeline.editorial import review_candidate
 
-        candidates = [review_candidate(model, candidate, segments, target_audience, objectives,
-                                       lecture_context or {}, min_s, max_s, duration) for candidate in candidates]
+        def review(item):
+            return review_candidate(model, item, segments, target_audience, objectives,
+                                    lecture_context or {}, min_s, max_s, duration)
+
+        candidates = [review(candidate) for candidate in candidates]
+        candidates = _top_up(candidates, segments, min_s, max_s, duration, review)
+    else:
+        candidates = _top_up(candidates, segments, min_s, max_s, duration, lambda item: item)
     return [_describe_candidate(model, candidate, segments) if candidate.get("editorial_status") != "rejected"
             else candidate for candidate in candidates]
+
+
+PREFERRED_CLIPS = 3
+
+
+def _overlaps(item: dict, others: list[dict]) -> bool:
+    return any(item["start"] < other["end"] and item["end"] > other["start"] for other in others)
+
+
+def _top_up(candidates: list[dict], segments: list[dict], min_s: float, max_s: float, duration: float, review) -> list[dict]:
+    """Add reviewed sentence-bounded alternatives until PREFERRED_CLIPS usable clips exist; never pads or relaxes limits."""
+    usable = [item for item in candidates if item.get("editorial_status") != "rejected"]
+    if len(usable) >= PREFERRED_CLIPS:
+        return candidates
+    attempted = {(item["start"], item["end"]) for item in candidates}
+    attempted.update((item["original_range"]["start"], item["original_range"]["end"])
+                     for item in candidates if "original_range" in item)
+    recovery = "top_up" if usable else "after_editorial_rejection"
+    limit = 8 if usable else 12
+    reviews = 0
+    for alternative in _normalize_candidates(_window_fallback(segments, min_s, max_s), segments, min_s, max_s, duration):
+        if len(usable) >= PREFERRED_CLIPS or reviews >= limit:
+            break
+        if (alternative["start"], alternative["end"]) in attempted or _overlaps(alternative, usable):
+            continue
+        alternative.update(id=f"c{len(candidates) + 1}", recovery=recovery)
+        checked = review(alternative)
+        candidates.append(checked)
+        reviews += 1
+        if checked.get("editorial_status") != "rejected":
+            usable.append(checked)
+    return candidates

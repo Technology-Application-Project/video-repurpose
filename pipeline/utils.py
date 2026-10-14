@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,8 +26,17 @@ FONT_CANDIDATES = [
 ]
 
 
-def new_run_id() -> str:
-    return uuid.uuid4().hex[:10]
+def slugify(text: str | None, fallback: str = "item", limit: int = 40) -> str:
+    """Lowercase letters, digits and single hyphens only, so the name is safe in paths and FFmpeg filters."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")[:limit].strip("-")
+    return slug or fallback
+
+
+def new_run_id(source_name: str | None = None) -> str:
+    """`YYYYMMDD-HHMM_<source>_<hex4>` when the source file name is known, else a bare 10-character id."""
+    if not source_name:
+        return uuid.uuid4().hex[:10]
+    return f"{datetime.now():%Y%m%d-%H%M}_{slugify(Path(source_name).stem, 'video')}_{uuid.uuid4().hex[:4]}"
 
 
 def run_dir(run_id: str) -> Path:

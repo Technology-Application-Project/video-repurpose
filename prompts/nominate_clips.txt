@@ -18,8 +18,9 @@ Return JSON only, with this shape:
 }
 
 Rules:
-- Nominate 8 to 12 candidates if the transcript allows it.
+- Nominate up to 12 candidates only if the transcript supports them. Aim for at least 3 separate, non-overlapping clips when the transcript supports them; never pad with incomplete or off-topic clips.
 - Each clip must be between MIN_SECONDS and MAX_SECONDS long.
+- Compute end minus start for every range before returning it. Combine consecutive segments to meet the minimum and include a complete explanation; do not return a short isolated sentence.
 - Each clip must contain exactly one knowledge point related to the topic or objectives.
 - A viewer who did not see earlier parts must still understand the clip.
 - Skip greetings, guest introductions, ads, housekeeping, and "as I said earlier".

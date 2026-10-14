@@ -1,4 +1,57 @@
-# Post-Generation Assessment Rubric
+# Post-Generation Assessment
+
+## Automatic Technical Checks
+
+Metrics version 2.0 is the default final assessment. Selecting an export in
+**5. Assessment** runs the checks automatically, without a reviewer or subjective
+ratings. The report shows measured values, explicit thresholds and pass/fail counts.
+Unavailable measurements are not treated as passes. A failed check makes the
+technical result failed; otherwise unavailable checks make it incomplete.
+
+| Check | Threshold or requirement |
+|---|---|
+| Export metadata | Readable selection JSON object |
+| Audio/video streams | Both present |
+| Full media decode | FFmpeg completes without decoder errors |
+| Duration | 30-60 seconds for new videos; recorded 60-90 and 45-120 policies for earlier exports |
+| Aspect ratio | Explicit target within 0.02 ratio units; Original is not applicable |
+| SRT parsing | Valid, nonempty sidecar |
+| Cue timing | Positive, ordered, nonempty cues within video; 0.05s overlap and 0.1s end tolerance |
+| Reading speed | At most 20 characters/second, including spaces after whitespace normalization |
+| Timeline consistency | Clip IDs/order match selection; contiguous within 0.1s; clip lengths within 0.15s; total within 0.2s |
+| Narration metadata | Enabled cards have expected text, saved voice/rate and sufficient hold time |
+| Narration sidecar | Text matches; start within 0.05s and end within 0.1s of recorded narration |
+| Narration audio | Peak above -60 dBFS in every narrated interval, measured on decoded 8 kHz mono audio |
+| Generated media | Exported inventory hashes match approved assets; narration stems checked separately from music |
+| Integrated loudness | -24 to -14 LUFS, measured by FFmpeg loudnorm input statistics |
+| True peak | At most -1 dBTP |
+
+These are configured delivery targets, not universal quality standards. The result
+does not score factual correctness, semantic source fidelity, educational value or
+audience suitability. Sidecar checks do not verify transcription accuracy, burned-in
+contrast or text placement. Audible intervals do not prove the spoken words or voice
+identity. Publication suitability stays **not assessed**, even if all technical
+checks pass. The existing pre-export storyboard approval remains unchanged.
+
+For Researcher, General public and Kids (ages 8-12), assess writing and visual
+treatment. Review every automatic trim/removal against surrounding source context.
+Generated images/B-roll must be marked as illustrations, never invented experimental
+evidence, data, people or events. Overlays must not conceal important source diagrams.
+Listen to the final mix: stem audibility does not prove speech is intelligible under
+music. Check for unwanted vocals, distracting effects and redistribution permissions.
+
+Reports are saved under `assessments/ASSESSMENT_ID/assessment.json` and
+`assessment.md`. SHA-256 hashes bind each report to the MP4, SRT, post and selection.
+Complete measurements are reused only for matching hashes and metric version.
+**Re-run checks** or `--force` creates a fresh report. Changes during measurement
+reject the report. No exports or existing ZIPs are overwritten.
+
+```sh
+python -m pipeline.assess exports/RUN_ID/EXPORT_ID --automatic
+python -m pipeline.assess exports/RUN_ID/EXPORT_ID --automatic --force
+```
+
+## Legacy Editorial Rubric
 
 Version 1.1. Assess the rendered compilation, caption sidecar and published text
 against the source lecture and the audience saved with the export. This is an editorial
@@ -78,19 +131,11 @@ A failed or unassessed gate blocks approval regardless of total score. An assist
 cannot attest human final review. This is a local reviewer declaration, not an
 authenticated signature or automatic publishing permission.
 
-## Assess in the App
+## Legacy Manual Workflow
 
-Open **5. Assessment** and select an export. The latest matching saved assessment
-appears beside the final video and exported post, with its reviewer attribution.
-**Refresh exports** reloads the saved assessment. New exports appear automatically.
-
-For a new human review, enter your name, choose ratings and record supporting
-evidence/time ranges. Complete publication gates only after the relevant checks;
-human final review requires watching and listening to the exported video.
-**Calculate + save assessment** produces the weighted report and JSON/Markdown
-downloads. Missing ratings stay unassessed. Editing the form clears the displayed
-score and downloads until recalculation. Loading an export resets the new-review
-form; it does not adopt another reviewer's ratings as your own.
+The former final-assessment rating form is no longer in the app. Older editorial
+reports are preserved and can still be generated with the legacy CLI below. They
+are separate from automated technical reports and do not change their results.
 
 ## Run an Assessment
 
@@ -114,7 +159,8 @@ and ZIP are untouched. Assessment reports are not inserted into the original ZIP
 SHA-256 hashes bind the review to the video, caption sidecar, post and selection.
 Missing or changed hashes reject the review. If any of these files changes, create
 a new template and reassess; a previously saved report does not approve new content.
-The command line and Gradio tab use the same scoring and artifact validation.
+These legacy commands retain editorial scoring and artifact validation. The Gradio
+tab uses the automatic metrics described above instead.
 
 ## Candidate Scores Are Separate
 

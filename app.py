@@ -1,30 +1,42 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import math
 import shutil
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import gradio as gr
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env", override=False)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from pipeline.assemble import assemble_compilation
+from pipeline.autoselect import auto_select
 from pipeline.cut import cut_clip, make_preview
-from pipeline.assess import DIMENSIONS, GATES, RUBRIC_VERSION, artifact_hashes, assess_export, assessment_markdown, export_context, score_review
+from pipeline.cloud import CloudBatch, cloud_quote, quote_markdown
+from pipeline.fit import fit_selection
+from pipeline.media import prepare_media, prepare_narration, verify_media
+from pipeline.project import data_hash, file_hash
+from pipeline.assess import (DIMENSIONS, GATES, RUBRIC_VERSION, artifact_hashes, assess_export,
+                             assess_export_automatically, assessment_markdown, export_context, objective_html, score_review,
+                             selection_label)
 from pipeline.contracts import selection_revision, validate_range
 from pipeline.export import DEFAULT_CTA, export_clips
 from pipeline.editorial import EDITORIAL_VERSION, infer_lecture_context
 from pipeline.nominate import list_ollama_models, nominate_candidates
 from pipeline.rank import rank_candidates
-from pipeline.transcribe import transcribe_video
+from pipeline.transcribe import DEFAULT_WHISPER_MODEL, WHISPER_MODEL_LABELS, transcribe_video
 from pipeline.storyboard import (TRANSITION_MODES, draft_storyboard, generate_storyboard,
-                                storyboard_revision, validate_compilation_duration, validate_storyboard)
+                                AUDIENCE_GOALS, DEFAULT_AUDIENCE, AUDIENCE_PROFILE_VERSION, DURATION_BUDGET,
+                                resolve_narration_profile, storyboard_revision, validate_compilation_duration, validate_storyboard)
 from pipeline.utils import (
     EXPORT_ROOT,
     MAX_KEEP,
@@ -40,35 +52,6 @@ from pipeline.utils import (
 )
 
 ASPECT_RATIOS = ["Original", "16:9", "9:16", "1:1"]
-AUDIENCE_GOALS = {
-    "General audience": [
-        "Explain the lecture's key ideas in accessible language without assumed specialist knowledge.",
-        "Use concrete examples that show why the ideas matter in everyday life.",
-        "Present self-contained insights while preserving important context and caveats.",
-    ],
-    "Beginners": [
-        "Introduce foundational concepts and explain unfamiliar terms.",
-        "Use simple examples with enough setup for someone new to the subject.",
-        "Explain one idea at a time without assuming prior subject knowledge.",
-    ],
-    "Students": [
-        "Explain central concepts and the reasoning behind them.",
-        "Use worked examples that connect theory to application.",
-        "Clarify common misconceptions and important distinctions for study.",
-    ],
-    "Professionals": [
-        "Explain practical applications of the lecture's ideas in professional work.",
-        "Highlight actionable methods, decisions and real-world examples.",
-        "Preserve implementation trade-offs, constraints and limitations.",
-    ],
-    "Advanced learners": [
-        "Explain deeper mechanisms and nuanced arguments beyond introductory definitions.",
-        "Examine evidence, assumptions, limitations and competing interpretations.",
-        "Connect advanced concepts through detailed examples and analysis.",
-    ],
-}
-DEFAULT_AUDIENCE = "General audience"
-AUDIENCE_PROFILE_VERSION = "1.0"
 
 
 def empty_state() -> dict:
@@ -81,10 +64,11 @@ def empty_state() -> dict:
         "objectives": [],
         "target_audience": DEFAULT_AUDIENCE,
         "audience_profile_version": AUDIENCE_PROFILE_VERSION,
+        "duration_budget": dict(DURATION_BUDGET),
         "lecture_context": None,
         "source_url": "",
-        "min_s": 20.0,
-        "max_s": 45.0,
+        "min_s": 6.0,
+        "max_s": 15.0,
         "aspect_ratio": "Original",
         "model": "qwen2.5",
         "transcript": None,
@@ -92,6 +76,7 @@ def empty_state() -> dict:
         "approved": [],
         "confirmed": False,
         "approval_revision": None,
+        "selection": None,
     }
 
 
@@ -163,7 +148,8 @@ def invalidate_range_score():
     return "Range changed. Editorial score and evidence unavailable for the edited excerpt; re-nominate to rescore."
 
 
-def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_ratio, model, state, progress=gr.Progress()):
+def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_ratio, model, state,
+               whisper_model=DEFAULT_WHISPER_MODEL, progress=gr.Progress()):
     state = dict(state or empty_state())
     path = as_video_path(video)
     if not path:
@@ -176,14 +162,14 @@ def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_r
 
     progress(0.05, desc="Checking ffmpeg")
     ffmpeg_bin()
-    run_id = new_run_id()
+    run_id = new_run_id(Path(path).name)
     work = run_dir(run_id)
     suffix = Path(path).suffix or ".mp4"
     stored = work / f"source{suffix}"
     shutil.copy2(path, stored)
 
-    progress(0.2, desc="Transcribing with WhisperX (first run is slow)")
-    transcript = transcribe_video(str(stored), work)
+    progress(0.2, desc=f"Transcribing with WhisperX {whisper_model} (cached if this file was already transcribed)")
+    transcript = transcribe_video(str(stored), work, whisper_model)
     segments = transcript.get("segments") or []
     if not segments:
         raise gr.Error("WhisperX produced an empty transcript.")
@@ -207,11 +193,15 @@ def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_r
             "approved": [],
             "confirmed": False,
             "approval_revision": None,
+            "selection": None,
         }
     )
     viewer = transcript_markdown(segments)
+    asr = transcript.get("asr") or {}
+    engine = (f" · {asr['model']} {asr['compute_type']}, "
+              f"{'cache hit' if asr.get('cached') else 'transcribed'} in {asr.get('seconds')}s") if asr else ""
     status = (
-        f"Transcribed {len(segments)} segments · language `{transcript.get('language')}` · "
+        f"Transcribed {len(segments)} segments · language `{transcript.get('language')}`{engine} · "
         f"run `{run_id}`. Next: nominate + rank."
     )
     return (
@@ -233,9 +223,11 @@ def audience_settings(target_audience):
     return f"Lecture highlights for {target_audience.lower()}", list(AUDIENCE_GOALS[target_audience])
 
 
-def transcribe_for_audience(video, target_audience, source_url, min_s, max_s, aspect_ratio, model, state, progress=gr.Progress()):
+def transcribe_for_audience(video, target_audience, source_url, min_s, max_s, aspect_ratio, model, state,
+                            whisper_model=DEFAULT_WHISPER_MODEL, progress=gr.Progress()):
     topic, objectives = audience_settings(target_audience)
-    result = transcribe(video, topic, "\n".join(objectives), source_url, min_s, max_s, aspect_ratio, model, state, progress=progress)
+    result = transcribe(video, topic, "\n".join(objectives), source_url, min_s, max_s, aspect_ratio, model, state,
+                        whisper_model, progress=progress)
     result[0]["target_audience"] = target_audience
     return result
 
@@ -251,13 +243,11 @@ def change_target_audience(target_audience, state):
             *(value for _ in range(MAX_REVIEW) for value in _blank_row()))
 
 
-def transcript_markdown(segments: list[dict], limit: int = 80) -> str:
+def transcript_markdown(segments: list[dict]) -> str:
     lines = ["| Start | End | Text |", "|---:|---:|---|"]
-    for seg in segments[:limit]:
+    for seg in segments:
         text = str(seg.get("text", "")).replace("|", "\\|")
         lines.append(f"| {seg['start']:.2f} | {seg['end']:.2f} | {text} |")
-    if len(segments) > limit:
-        lines.append(f"\n_{len(segments) - limit} more segments omitted._")
     return "\n".join(lines)
 
 
@@ -306,6 +296,7 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
     state["approved"] = []
     state["confirmed"] = False
     state["approval_revision"] = None
+    state["selection"] = None
     state["model"] = model or state.get("model")
     table = [
         [
@@ -316,6 +307,7 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
             c["end"],
             c["title"],
             c["takeaway"],
+            "",
         ]
         for c in ranked
     ]
@@ -325,10 +317,10 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
     if len(ranked) == 1:
         speech_seconds = float(ranked[0]["end"]) - float(ranked[0]["start"])
         status += " One candidate is enough to proceed after review; no between-clip transitions are needed."
-        if speech_seconds + 3 + 6 < 45:
-            status += (f" This excerpt is {speech_seconds:.1f}s; a 3s opening and even a 6s ending cannot reach the 45s minimum. "
-                       "Increase Max clip seconds and rerun nomination, or extend to a complete source explanation "
-                       "within the selected limits. Do not pad or duplicate speech to meet the target.")
+        if speech_seconds + 3 + 6 < DURATION_BUDGET["min_seconds"]:
+            status += (f" This excerpt is {speech_seconds:.1f}s; a 3s intro and 6s ending cannot reach the {DURATION_BUDGET['min_seconds']}s minimum. "
+                       "Keep at least one more reviewed clip, or increase Max clip seconds and rerun nomination. "
+                       "Do not pad or duplicate speech to meet the target.")
     if len(ranked) < MIN_KEEP:
         status += f" Fewer than {MIN_KEEP} usable clips: adjust duration limits and rerun; do not force incomplete cuts."
         reasons = [f"{candidate['id']}: {candidate.get('editorial_reason', 'Review required')}"
@@ -354,7 +346,31 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
     )
 
 
-def nominate_for_audience(state, model, target_audience, min_s, max_s, progress=gr.Progress()):
+def _apply_auto_selection(result):
+    """Keep and confirm the automatically chosen clips in the nomination outputs; no human review is claimed."""
+    state, status, table, kept_md, confirm_update, export_update, *rows = result
+    ranked = state.get("candidates") or []
+    if not ranked:
+        return result
+    try:
+        chosen, record = auto_select(ranked, state.get("target_audience"))
+    except ValueError as exc:
+        return (state, f"{status} Automatic selection stopped: {exc}.", table, kept_md, confirm_update, export_update, *rows)
+    state = dict(state)
+    flags = [candidate["id"] in chosen for candidate in ranked]
+    kept = _read_rows([c["id"] for c in ranked], [c.get("title") for c in ranked], [c.get("takeaway") for c in ranked],
+                      [c["start"] for c in ranked], [c["end"] for c in ranked], flags, state)
+    state.update(approved=kept, confirmed=True, approval_revision=selection_revision(state, kept), selection=record)
+    for index, keep in enumerate(flags):
+        rows[9 * index + 8] = keep
+    table = [[*row[:7], "automatic" if keep else ""] for row, keep in zip(table, flags)]
+    status += (f"\n\nSelected {len(kept)} clips automatically ({', '.join(chosen)}); no human review. "
+               + " ".join(record["warnings"]) + " Change a Keep box on the Review tab to choose manually instead.").rstrip()
+    return (state, status, table, f"**Kept: {len(kept)} / {MIN_KEEP}-{MAX_KEEP} required - selected automatically ({', '.join(chosen)}); no human review**",
+            gr.update(interactive=True), export_update, *rows)
+
+
+def nominate_for_audience(state, model, target_audience, min_s, max_s, automatic=False, progress=gr.Progress()):
     topic, goals = audience_settings(target_audience)
     minimum, maximum = float(min_s), float(max_s)
     if not all(math.isfinite(value) for value in (minimum, maximum)) or not 0 < minimum <= maximum:
@@ -362,7 +378,8 @@ def nominate_for_audience(state, model, target_audience, min_s, max_s, progress=
     state = dict(state or empty_state())
     state.update(target_audience=target_audience, audience_profile_version=AUDIENCE_PROFILE_VERSION,
                  objectives=goals, topic=topic, min_s=minimum, max_s=maximum)
-    return nominate_and_rank(state, model, progress=progress)
+    result = nominate_and_rank(state, model, progress=progress)
+    return _apply_auto_selection(result) if automatic else result
 
 
 def change_duration_limits(min_s, max_s, target_audience, state):
@@ -376,6 +393,7 @@ def count_kept(state, *keeps):
     n = sum(1 for keep in keeps if keep)
     state["confirmed"] = False
     state["approval_revision"] = None
+    state["selection"] = None
     msg = f"**Kept: {n} / {MIN_KEEP}–{MAX_KEEP} required**"
     return (
         state,
@@ -429,6 +447,13 @@ def _read_rows(cids, titles, takeaways, starts, ends, keeps, state) -> list[dict
     return kept
 
 
+def _selection_after_confirm(record, kept):
+    """Human edits clear the automatic record (count_kept); automatic fitting alone keeps it, with the final ranges."""
+    if record and record.get("mode") == "automatic":
+        return {**record, "confirmed_ranges": [[clip["id"], clip["start"], clip["end"]] for clip in kept]}
+    return {"mode": "manual", "human_review": True}
+
+
 def confirm_selection(state, *row_values):
     state = dict(state or empty_state())
     n = MAX_REVIEW
@@ -444,7 +469,8 @@ def confirm_selection(state, *row_values):
     state["approved"] = kept
     state["confirmed"] = True
     state["approval_revision"] = selection_revision(state, kept)
-    status = f"Confirmed {len(kept)} clips. Packaging is unlocked on tab 4."
+    state["selection"] = _selection_after_confirm(state.get("selection"), kept)
+    status = f"Confirmed {len(kept)} clips. Generating the storyboard and preview for tab 4."
     joined = "\n".join(
         f"• {(c.get('takeaway') or c.get('title') or '').strip()}"
         for c in kept
@@ -466,7 +492,7 @@ def confirm_selection(state, *row_values):
         state,
         status,
         f"**Kept: {len(kept)} / {MIN_KEEP}–{MAX_KEEP} required · confirmed**",
-        gr.update(interactive=True),
+        gr.update(interactive=False),
         state.get("topic") or "Highlights",
         joined,
         *pack_updates,
@@ -546,6 +572,7 @@ def do_export(
             "min_seconds": state.get("min_s"),
             "max_seconds": state.get("max_s"),
             "editorial_version": EDITORIAL_VERSION,
+            "selection": state.get("selection"),
         },
     )
     status = f"Exported compilation to `{compilation}`."
@@ -573,21 +600,22 @@ def invalidate_package_storyboard(state):
     return state, "Storyboard changed. Preview and approve again.", None, False, gr.update(interactive=False)
 
 
-def storyboard_control_updates(state):
-    state = state or {}
-    try:
-        _, revision = _confirmed_storyboard_selection(state)
-    except gr.Error:
-        return gr.update(interactive=False), gr.update(interactive=False)
-    has_draft = bool(state.get("storyboard_draft")) and state.get("storyboard_selection_revision") == revision
-    has_preview = has_draft and bool(state.get("storyboard_preview_revision"))
-    return gr.update(interactive=has_draft), gr.update(interactive=has_preview)
-
-
 def revoke_storyboard_approval(state):
     state = dict(state or empty_state())
     state["storyboard_approval"] = None
     return state, "Storyboard approval required.", gr.update(interactive=False)
+
+
+def invalidate_edited_storyboard(state, *values):
+    try:
+        _, revision = _read_storyboard(state, values)
+        expected = state.get("storyboard_preview_revision") or storyboard_revision(
+            state["storyboard_selection_revision"], state["storyboard_draft"])
+        if revision == expected:
+            return tuple(gr.skip() for _ in range(5))
+    except (ValueError, TypeError, KeyError, gr.Error):
+        pass
+    return invalidate_package_storyboard(state)
 
 
 def draft_package_storyboard(state, aspect_ratio, *, generated=None):
@@ -595,6 +623,9 @@ def draft_package_storyboard(state, aspect_ratio, *, generated=None):
     clips, revision = _confirmed_storyboard_selection(state)
     draft = copy.deepcopy(generated) if generated is not None else draft_storyboard(
         clips, state.get("target_audience", DEFAULT_AUDIENCE), state.get("source_url") or "")
+    state.pop("narration_voice", None)
+    draft.pop("narration_voice", None)
+    draft["narration_profile"] = resolve_narration_profile(draft["audience"])
     draft["aspect_ratio"] = aspect_ratio
     state.update(storyboard_draft=draft, storyboard_selection_revision=revision,
                  storyboard_approval=None, storyboard_preview_revision=None)
@@ -613,27 +644,85 @@ def draft_package_storyboard(state, aspect_ratio, *, generated=None):
             *[gr.update(visible=index < len(clips) - 1) for index in range(MAX_KEEP - 1)])
 
 
+def refresh_cloud_quote():
+    try:
+        quote = cloud_quote()
+        return quote, quote_markdown(quote), False
+    except (ValueError, OSError) as exc:
+        return None, f"**Cloud estimate unavailable, so generation is blocked.** {exc}", False
+
+
+def approve_cloud_budget(state, quote, accepted, aspect_ratio, *row_values):
+    state = dict(state or empty_state())
+    state["cloud_approval"] = None
+    if accepted:
+        if not quote or quote != cloud_quote():
+            raise gr.Error("Refresh the cloud estimate before approving it.")
+        confirmed = confirm_selection(state, *row_values)[0]
+        revision = confirmed["approval_revision"]
+        state["cloud_approval"] = {"quote": quote, "current_revision": revision,
+                                   "scope": data_hash({"selection": revision, "aspect": aspect_ratio}),
+                                   "aspect": aspect_ratio, "batch_id": uuid.uuid4().hex}
+    return state
+
+
+def open_cloud_batch(state, aspect_ratio):
+    approval = state.get("cloud_approval") or {}
+    if (approval.get("current_revision") != selection_revision(state, state.get("approved") or [])
+            or approval.get("aspect") != aspect_ratio):
+        raise ValueError("Approve the current cloud estimate on Review before confirming or regenerating this selection.")
+    return CloudBatch(Path(state["work"]) / "cloud" / approval["batch_id"], approval["quote"],
+                      consent=True, scope=approval["scope"])
+
+
 def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress()):
     state = dict(state or empty_state())
+    clips, _ = _confirmed_storyboard_selection(state)
     state.update(storyboard_draft=None, storyboard_selection_revision=None,
-                 storyboard_approval=None, storyboard_preview_revision=None)
+                 storyboard_approval=None, storyboard_preview_revision=None, storyboard_error=None)
     unchanged = [gr.skip() for _ in range(11 + 3 * (MAX_KEEP - 1))]
-    try:
-        clips, _ = _confirmed_storyboard_selection(state)
-    except gr.Error as exc:
-        yield state, f"Storyboard not generated: {exc}", None, False, gr.update(interactive=False), *unchanged
-        return
     yield state, "Generating storyboard from all selected excerpts...", None, False, gr.update(interactive=False), *unchanged
+    batch = None
     try:
-        progress(0.05, desc="Generating storyboard with Ollama")
-        draft = generate_storyboard(model or state.get("model") or "qwen2.5", clips,
-                                    state.get("target_audience", DEFAULT_AUDIENCE), state.get("source_url") or "")
+        batch = open_cloud_batch(state, aspect_ratio)
+        audience = state.get("target_audience", DEFAULT_AUDIENCE)
+        original = copy.deepcopy(clips)
+        overhead = None
+        reports = []
+        for attempt in range(2):
+            progress(0.05, desc=f"Fitting complete ideas to {DURATION_BUDGET['min_seconds']}-{DURATION_BUDGET['max_seconds']} seconds")
+            clips, report = fit_selection(original, state["transcript"]["segments"], audience=audience,
+                                          model=model, source_duration=state["source_duration"],
+                                          minimum=state.get("min_s", 20), maximum=state.get("max_s", 45),
+                                          lecture_context=state.get("lecture_context"), overhead=overhead)
+            reports.append(report)
+            state["approved"] = clips
+            state["approval_revision"] = selection_revision(state, clips)
+            state["cloud_approval"] = dict(state.get("cloud_approval") or {}, current_revision=state["approval_revision"])
+            state["fit_report"] = reports
+            progress(0.15, desc="Generating hook, bridges and ending with the approved text provider")
+            draft = generate_storyboard(batch.quote["items"]["text"]["model"], clips, audience,
+                                        state.get("source_url") or "", request=batch.text)
+            draft["aspect_ratio"] = aspect_ratio
+            measured = prepare_narration(draft, clips, Path(state["work"]))
+            if DURATION_BUDGET["min_seconds"] <= measured <= DURATION_BUDGET["max_seconds"] - 0.2:
+                break
+            overhead = measured - sum(clip["end"] - clip["start"] for clip in clips) - (len(clips) - 1) * 3
+        else:
+            raise ValueError(f"Measured narration produces {measured:.2f}s after two fitting attempts. Adjust the selection and approve a new batch.")
+        progress(0.35, desc="Generating approved illustrations, B-roll and music")
+        prepare_media(draft, batch, aspect_ratio)
+        draft["fit_report"] = reports
         result = draft_package_storyboard(state, aspect_ratio, generated=draft)
         state = result[0]
         yield (state, "Generated draft ready. Rendering preview...", *result[2:])
     except Exception as exc:
-        yield state, f"Storyboard generation failed: {exc}. Correct the issue, then confirm the selection again to retry.", None, False, gr.update(interactive=False), *unchanged
+        state["storyboard_error"] = str(exc)
+        yield state, f"Storyboard generation failed: {exc}. Regenerate after correcting the issue.", None, False, gr.update(interactive=False), *unchanged
         return
+    finally:
+        if batch is not None:
+            batch.close()
     values = [*result[6:-(MAX_KEEP - 1)], aspect_ratio]
     try:
         preview = preview_package_storyboard(state, *values, progress=progress)
@@ -645,33 +734,67 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
 
 def confirm_and_generate_storyboard(state, aspect_ratio, model, *row_values, progress=gr.Progress()):
     confirmed = confirm_selection(state, *row_values)
-    for generated in generate_package_storyboard(confirmed[0], aspect_ratio, model, progress=progress):
-        yield (*confirmed[1:3], *confirmed[6:], *generated)
+    for output in generate_package_storyboard(confirmed[0], aspect_ratio, model, progress=progress):
+        yield output[1], confirmed[2], *confirmed[6:], *output
+
+
+def confirm_and_generate_with_rows(state, aspect_ratio, model, *row_values, progress=gr.Progress()):
+    for output in confirm_and_generate_storyboard(state, aspect_ratio, model, *row_values, progress=progress):
+        output = list(output)
+        current = output[2 + 3 * MAX_KEEP]
+        approved = {clip["id"]: clip for clip in current.get("approved", [])}
+        output[1] = f"**Kept: {len(approved)} / {MIN_KEEP}-{MAX_KEEP} required - confirmed**"
+        for index in range(MAX_KEEP):
+            clips = current.get("approved", [])
+            clip = clips[index] if index < len(clips) else None
+            output[2 + 3 * index:5 + 3 * index] = [gr.update(visible=bool(clip)),
+                                                   clip["title"] if clip else "", clip.get("takeaway", "") if clip else ""]
+        original_rows = list(row_values)
+        for index, cid in enumerate(row_values[:MAX_REVIEW]):
+            clip = approved.get(cid)
+            original_rows[5 * MAX_REVIEW + index] = bool(clip)
+            if clip:
+                for block, key in ((1, "title"), (2, "takeaway"), (3, "start"), (4, "end")):
+                    original_rows[block * MAX_REVIEW + index] = clip[key]
+        report = current.get("fit_report")
+        summary = json.dumps(report, indent=2) if report else ""
+        yield *output, *original_rows[MAX_REVIEW:], summary
+
+
+def preview_or_generate_storyboard(state, model, *values, progress=gr.Progress()):
+    _, revision = _confirmed_storyboard_selection(state)
+    if not state.get("storyboard_draft") or state.get("storyboard_selection_revision") != revision:
+        yield from generate_package_storyboard(state, values[-1], model, progress=progress)
+        return
+    preview = preview_package_storyboard(state, *values, progress=progress)
+    yield *preview, *[gr.skip() for _ in range(11 + 3 * (MAX_KEEP - 1))]
 
 
 def storyboard_duration_status(state, *values):
     clips = (state or {}).get("approved") or []
     if not clips:
-        return "Compilation duration: no confirmed clips. Target: 45-120s."
+        return f"Compilation duration: no confirmed clips. Target: {DURATION_BUDGET['min_seconds']}-{DURATION_BUDGET['max_seconds']}s."
     try:
         speech = sum(float(clip["end"]) - float(clip["start"]) for clip in clips)
         dividers = sum(values[9 + index] == "Divider" for index in range(len(clips) - 1)) * float(values[8])
-        opening = (state.get("storyboard_draft") or {}).get("opening") or {"mode": "Card"}
-        opening_seconds = float(values[2]) if opening.get("mode") == "Card" else 0
-        total = opening_seconds + speech + dividers + float(values[7])
+        opening = float(values[2]) if ((state or {}).get("storyboard_draft") or {}).get("opening", {}).get("mode") == "Card" else 0
+        total = opening + speech + dividers + float(values[7])
         if not math.isfinite(total):
             raise ValueError("Non-finite duration")
-        label = "within target" if 45 <= total <= 120 else "outside target; adjust selection or timing"
-        narration_note = " Opening may extend to finish title narration; measured duration is checked after rendering." if opening.get("narration") else ""
-        return f"Estimated compilation: **{total:.1f}s / 45-120s** ({label}). Opening {opening_seconds:.1f}s + speech {speech:.1f}s + dividers {dividers:.1f}s + ending {float(values[7]):.1f}s.{narration_note}"
+        total = ((state or {}).get("storyboard_draft") or {}).get("measured_seconds", total)
+        lower, upper = DURATION_BUDGET["min_seconds"], DURATION_BUDGET["max_seconds"]
+        label = "within target" if lower <= total <= upper else "outside target; adjust selection or timing"
+        return f"Estimated compilation: **{total:.1f}s / {lower}-{upper}s** ({label}). Intro minimum {opening:.1f}s + speech {speech:.1f}s + dividers {dividers:.1f}s + ending minimum {float(values[7]):.1f}s. Measured preview must fit the target."
     except (TypeError, ValueError, IndexError):
-        return "Compilation duration unavailable: check timing controls. Target: 45-120s."
+        return f"Compilation duration unavailable: check timing controls. Target: {DURATION_BUDGET['min_seconds']}-{DURATION_BUDGET['max_seconds']}s."
 
 
 def _read_storyboard(state, values):
     clips, revision = _confirmed_storyboard_selection(state)
     if not state.get("storyboard_draft") or state.get("storyboard_selection_revision") != revision:
-        raise gr.Error("Draft the storyboard for the current selection first.")
+        if state.get("storyboard_error"):
+            raise gr.Error(f"Automatic storyboard generation failed: {state['storyboard_error']}. Use Regenerate storyboard to retry.")
+        raise gr.Error("No storyboard for the current selection. Use Preview storyboard to generate it automatically.")
     if len(values) != 11 + 2 * (MAX_KEEP - 1):
         raise gr.Error("Incomplete storyboard controls.")
     title, subtitle, opening_seconds, takeaway, question, credit, cta, ending_seconds, join_seconds = values[:9]
@@ -690,6 +813,8 @@ def _read_storyboard(state, values):
     except ValueError as exc:
         raise gr.Error(str(exc)) from exc
     if draft.get("generation") and any(draft[key] != state["storyboard_draft"][key] for key in ("opening", "ending", "transitions")):
+        if draft.get("media_assets"):
+            raise gr.Error("Generated media and narration match the previous text. Regenerate and review after changing storyboard text or timing.")
         draft["generation"]["status"] = "edited_model_draft"
     return draft, storyboard_revision(revision, draft)
 
@@ -697,6 +822,7 @@ def _read_storyboard(state, values):
 def preview_package_storyboard(state, *values, progress=gr.Progress()):
     state = dict(state or empty_state())
     draft, revision = _read_storyboard(state, values)
+    verify_media(draft)
     work = Path(state["work"]) / "storyboards" / revision / "preview"
     preview = work / "preview.mp4"
     if not preview.exists():
@@ -708,12 +834,31 @@ def preview_package_storyboard(state, *values, progress=gr.Progress()):
         pending = work / "pending.mp4"
         assemble_compilation(raw_clips, pending, intro_title="", clips=state["approved"],
                              segments=state["transcript"]["segments"], storyboard=draft, preview=True,
-                             aspect_ratio=draft["aspect_ratio"], work=work / "assemble", srt_path=work / "captions.srt")
+                             aspect_ratio=draft["aspect_ratio"], work=work / "assemble", srt_path=work / "captions.srt",
+                             narration_cache=Path(state["work"]) / "narration_cache",
+                             approved_assets=draft.get("narration_assets"))
         pending.replace(preview)
     if "duration_budget" in draft:
-        validate_compilation_duration(media_duration(preview))
-    state.update(storyboard_preview_revision=revision, storyboard_approval=None)
-    return state, "Preview ready. Review the wording, clip joins, source evidence and text placement.", str(preview), False, gr.update(interactive=False)
+        validate_compilation_duration(media_duration(preview), draft["duration_budget"])
+    state.update(storyboard_preview_revision=revision, storyboard_approval=None,
+                 storyboard_preview_path=str(preview), storyboard_preview_sha256=file_hash(preview))
+    length = f" (about {draft['measured_seconds']:.0f}s)" if draft.get("measured_seconds") else ""
+    return state, f"Preview ready{length}. Review the wording, clip joins, source evidence and text placement. {storyboard_details(state, draft)}", str(preview), False, gr.update(interactive=False)
+
+
+def storyboard_details(state, draft):
+    """One line of what was chosen automatically, so the reviewer sees it next to the preview."""
+    selection = (state.get("selection") or {}).get("mode")
+    profile = draft.get("narration_profile") or {}
+    music = (draft.get("media_assets") or {}).get("music") or {}
+    accents = [value for value in (draft["opening"].get("accent"), *(join.get("accent") for join in draft["transitions"]),
+                                   draft["ending"].get("accent")) if value]
+    parts = ["Clips: " + ("selected automatically" if selection == "automatic" else "kept manually" if selection else "selection not recorded"),
+             f"Narrator: {profile['voice']}" if profile.get("voice") else None,
+             (f"Music: {music['title']} (library, {music['license']})" if music.get("provider") == "library"
+              else "Music: generated") if music else None,
+             "Accent words: " + ", ".join(accents) if accents else None]
+    return " · ".join(part for part in parts if part) + "."
 
 
 def approve_package_storyboard(state, attested, reviewer, *values):
@@ -723,6 +868,10 @@ def approve_package_storyboard(state, attested, reviewer, *values):
         raise gr.Error("A named human must review the preview and source evidence before approving.")
     if state.get("storyboard_preview_revision") != revision:
         raise gr.Error("Preview this storyboard revision before approving it.")
+    verify_media(draft)
+    if draft.get("media_assets") and (not state.get("storyboard_preview_path") or
+            file_hash(state["storyboard_preview_path"]) != state.get("storyboard_preview_sha256")):
+        raise gr.Error("Preview file changed. Render and review again.")
     state["storyboard_approval"] = {"revision": revision, "reviewer": reviewer.strip(), "kind": "human",
                                     "approved_at": datetime.now(timezone.utc).isoformat()}
     return state, "Storyboard approved for export. Final publication assessment is still required.", gr.update(interactive=True)
@@ -771,7 +920,8 @@ def load_assessment_export(export_key):
         hashes = artifact_hashes(destination)
         context = {"export_key": export_key, "artifact_sha256": hashes}
         context["selection_context"] = export_context(destination)
-        audience_note = f"Target audience: {context['selection_context'].get('target_audience') or 'Unknown (legacy export)'}."
+        audience_note = (f"Target audience: {context['selection_context'].get('target_audience') or 'Unknown (legacy export)'}. "
+                         f"{selection_label(context['selection_context'])}")
         summary = f"{audience_note}\n\nNot assessed."
         files = []
         saved = sorted(destination.glob("assessments/*/review.json"), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -824,40 +974,120 @@ def invalidate_ui_assessment():
     return "Review changed. Score pending recalculation.", []
 
 
+def load_objective_assessment(export_key, progress=gr.Progress()):
+    if not export_key:
+        return None, None, "", "No export selected.", []
+    try:
+        destination = _assessment_export_dir(export_key)
+        hashes = artifact_hashes(destination)
+        progress(0.1, desc="Measuring exported video, captions and narration")
+        report_dir = assess_export_automatically(destination, expected_hashes=hashes)
+        report = json.loads((report_dir / "assessment.json").read_text(encoding="utf-8"))
+        context = {"export_key": export_key, "artifact_sha256": hashes}
+        return (context, str(destination / "compilation.mp4"), (destination / "post.txt").read_text(encoding="utf-8"),
+                objective_html(report), [str(report_dir / name) for name in ("assessment.md", "assessment.json")])
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        raise gr.Error(f"Automatic assessment failed: {exc}") from exc
+
+
+def rerun_objective_assessment(context, export_key, progress=gr.Progress()):
+    if not context or context.get("export_key") != export_key:
+        raise gr.Error("Select an export and wait for its assessment to load.")
+    try:
+        progress(0.1, desc="Re-measuring exported artifacts")
+        report_dir = assess_export_automatically(_assessment_export_dir(export_key),
+                                               expected_hashes=context["artifact_sha256"], force=True)
+        report = json.loads((report_dir / "assessment.json").read_text(encoding="utf-8"))
+        return objective_html(report), [str(report_dir / name) for name in ("assessment.md", "assessment.json")]
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+        raise gr.Error(f"Automatic assessment failed: {exc}") from exc
+
+
+ASSESSMENT_CSS = """
+    #transcript-view { max-height: 360px; overflow-y: auto; border: 1px solid var(--border-color-primary); border-radius: 8px; padding: 0 8px; }
+    #transcript-view table { width: 100%; }
+    #transcript-view thead th { position: sticky; top: 0; background: var(--background-fill-primary); z-index: 1; }
+    #assessment-summary { min-width: 0; overflow-x: auto; }
+    .assess .banner { border-radius: 10px; padding: 16px 20px; color: #fff; margin-bottom: 10px; }
+    .assess .banner-pass { background: #1b8a3a; }
+    .assess .banner-fail { background: #c62828; }
+    .assess .banner-unavailable { background: #b26a00; }
+    .assess .banner-title { font-size: 1.5rem; font-weight: 800; letter-spacing: .02em; }
+    .assess .banner, .assess .banner * { color: #fff !important; }
+    .assess .banner-note { margin-top: 8px; font-size: .95rem; }
+    .assess .cell-what { font-weight: 400; font-size: .85rem; opacity: .75; margin-top: 2px; }
+    .assess .cell-fix { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(198,40,40,.12); font-size: .9rem; }
+    .assess .row-unavailable .cell-fix { background: rgba(178,106,0,.14); }
+    .assess .cell-raw { margin-top: 4px; font-size: .8rem; opacity: .7; }
+    .assess .cell-raw summary { cursor: pointer; }
+    .assess .chips { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .assess .chip { background: rgba(255,255,255,.22); border-radius: 999px; padding: 2px 12px; font-size: .9rem; }
+    .assess .assess-meta { margin: 6px 0 10px; opacity: .8; }
+    .assess .assess-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; }
+    .assess .assess-table th { text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border-color-primary); }
+    .assess .assess-table th:first-child, .assess .cell-status { width: 120px; }
+    .assess .assess-table th:nth-child(2) { width: 20%; }
+    .assess .assess-table td { padding: 8px 10px; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--border-color-primary); }
+    .assess .row-fail td { background: rgba(198,40,40,.14); }
+    .assess .row-fail td:first-child { border-left: 6px solid #c62828; }
+    .assess .row-fail .cell-check { font-weight: 700; }
+    .assess .row-pass td:first-child { border-left: 6px solid #1b8a3a; }
+    .assess .row-unavailable td { background: rgba(178,106,0,.14); }
+    .assess .row-unavailable td:first-child { border-left: 6px solid #b26a00; }
+    .assess .row-not_applicable td { opacity: .65; }
+    .assess .badge { display: inline-block; min-width: 86px; text-align: center; border-radius: 6px; padding: 3px 8px; font-weight: 800; font-size: .85rem; color: #fff; background: #6b7280; }
+    .assess .badge-pass { background: #1b8a3a; }
+    .assess .badge-fail { background: #c62828; }
+    .assess .badge-unavailable { background: #b26a00; }
+    .assess .assess-scope { margin-top: 12px; opacity: .85; }
+    """
+
+
 def build_app():
-    with gr.Blocks(title="Educational Short Clip Demo") as demo:
+    css_options = {"css": ASSESSMENT_CSS} if "css" in inspect.signature(gr.Blocks).parameters else {}
+    with gr.Blocks(title="Educational Short Clip Demo", **css_options) as demo:
         state = gr.State(empty_state())
         gr.Markdown(
             "# Educational Short Clip Demo\n"
-            "Transcribe a long lecture, let Ollama nominate clips, rank them against "
-            f"audience needs, **human-keep {MIN_KEEP}–{MAX_KEEP} on-topic clips**, then package for social."
+            "**Workflow:** 1 upload and transcribe → 2 nominate (clips are chosen automatically) → "
+            "3 approve the cloud cost and generate the storyboard → 4 review the preview, approve and export → 5 assess.\n\n"
+            "Narrator voice, cards, music and clip choice are automatic for the target audience. "
+            "Two human steps remain: **approving the cloud cost** and **approving the storyboard preview**."
         )
         stack_status = gr.Markdown("Checking Ollama and ffmpeg...")
 
         with gr.Tabs():
             with gr.Tab("1. Input"):
                 video = gr.Video(label="Source video (local mp4)", sources=["upload"])
-                target_audience = gr.Dropdown(list(AUDIENCE_GOALS), value=DEFAULT_AUDIENCE, label="Target audience")
+                target_audience = gr.Dropdown(list(AUDIENCE_GOALS), value=DEFAULT_AUDIENCE, label="Target audience",
+                                              info="Sets the clip goals, narrator (Researcher: Steffan, General public: Ava, Kids: Ana; "
+                                                   "neural voices need an internet connection), card style and background music.")
                 source_url = gr.Textbox(label="Source video URL (for CTA / post.txt)")
                 with gr.Row():
-                    min_s = gr.Slider(10, 40, value=20, step=1, label="Min clip seconds")
-                    max_s = gr.Slider(20, 90, value=45, step=1, label="Max clip seconds")
+                    min_s = gr.Slider(3, 20, value=6, step=1, label="Min clip seconds")
+                    max_s = gr.Slider(5, 45, value=15, step=1, label="Max clip seconds")
                 with gr.Row():
                     aspect_ratio = gr.Dropdown(
                         ASPECT_RATIOS,
-                        value="Original",
+                        value="16:9",
                         label="Aspect ratio",
+                        info="Generated cards support 16:9 and 9:16; Original and 1:1 use 16:9 artwork.",
                     )
                     model = gr.Dropdown(["qwen2.5"], value="qwen2.5", label="Ollama model", allow_custom_value=True)
+                whisper_model = gr.Dropdown([(label, name) for name, label in WHISPER_MODEL_LABELS.items()], value=DEFAULT_WHISPER_MODEL, label="Transcription model",
+                                            info="Slower models spell technical terms better; a model downloads on first use. Re-uploading the same file with the same model reuses the saved transcript.")
                 transcribe_btn = gr.Button("Run transcription", variant="primary")
                 input_status = gr.Markdown("Upload a video, then transcribe.")
 
             with gr.Tab("2. Transcript + candidates"):
-                transcript_view = gr.Markdown("_Transcript will appear here._")
+                transcript_view = gr.Markdown("_Transcript will appear here._", elem_id="transcript-view")
                 nominate_btn = gr.Button("Nominate + rank clips", variant="primary")
+                auto_select_box = gr.Checkbox(value=True, label="Choose clips automatically (no human review)",
+                                              info="Keeps and confirms the best-ranked clips that fit the 30-60 s budget (up to 3). "
+                                                   "Untick to review and keep clips yourself on tab 3.")
                 cand_status = gr.Markdown("Run transcription first.")
                 cand_table = gr.Dataframe(
-                    headers=["id", "editorial estimate / 100", "score status", "start", "end", "title", "takeaway"],
+                    headers=["id", "editorial estimate / 100", "score status", "start", "end", "title", "takeaway", "selected"],
                     label="Ranked candidates (read-only)",
                     interactive=False,
                     wrap=True,
@@ -865,11 +1095,18 @@ def build_app():
 
             with gr.Tab("3. Review"):
                 gr.Markdown(
-                    "Listen to Top N. Keep a clip only if it is **on-topic**, standalone, "
-                    "and one knowledge point. A weak opening is OK — adjust start/end instead of discarding."
+                    "With automatic selection on, the clips below are already kept and confirmed: approve the cloud cost, "
+                    "then generate. Change a Keep box or a time to take over manually. If you review, keep a clip only if it is "
+                    "**on-topic**, standalone, and one knowledge point. A weak opening is OK — adjust start/end instead of discarding."
                 )
                 kept_md = gr.Markdown(f"**Kept: 0 / {MIN_KEEP}–{MAX_KEEP} required**")
-                confirm_btn = gr.Button("Confirm selection", variant="primary", interactive=False)
+                quote_state = gr.State(None)
+                quote_view = gr.Markdown("Cloud pricing not loaded.")
+                quote_button = gr.Button("Refresh cloud estimate")
+                cloud_consent = gr.Checkbox(label="Approve this estimated cloud batch cost and send selected excerpts to the providers listed above",
+                                            info="Required before generating. Approval is for the current selection and aspect ratio.")
+                confirm_btn = gr.Button("Confirm clips + generate storyboard", variant="primary", interactive=False)
+                fit_report_view = gr.Textbox(label="Automatic selection changes", lines=8, interactive=False)
                 review_status = gr.Markdown("Nominate clips first.")
                 groups, previews, cids, titles, takeaways, metas, starts, ends, keeps, refresh_btns = (
                     [],
@@ -911,24 +1148,28 @@ def build_app():
 
             with gr.Tab("4. Package + export"):
                 gr.Markdown("### Storyboard")
+                gr.Markdown("Hook, bridges, ending, accent words, narration and music are generated for the target audience. "
+                            "Once media exists, changing any text or timing below requires **Regenerate storyboard** "
+                            "(new approved batch); the preview you approve is the one that is exported.")
+                draft_storyboard_btn = gr.Button("Regenerate storyboard")
                 storyboard_status = gr.Markdown("Confirm clips before drafting a storyboard.")
-                storyboard_duration = gr.Markdown("Compilation duration: no confirmed clips. Target: 45-120s.")
-                intro_title = gr.Textbox(label="Opening title / question (up to 10 words)")
-                intro_subtitle = gr.Textbox(label="Opening subtitle (optional, up to 8 words)")
-                overlay_position = gr.Radio(["Upper", "Middle"], value="Upper", label="Overlay position")
+                storyboard_duration = gr.Markdown(f"Compilation duration: no confirmed clips. Target: {DURATION_BUDGET['min_seconds']}-{DURATION_BUDGET['max_seconds']}s.")
+                intro_title = gr.Textbox(label="Opening hook, spoken (generated up to 7 words; up to 10 allowed)")
+                intro_subtitle = gr.Textbox(label="Opening subtitle (generated up to 6 words; up to 8 allowed)")
+                overlay_position = gr.Radio(["Upper", "Middle"], value="Upper", label="Overlay position", visible=False)
                 with gr.Row():
-                    intro_seconds = gr.Slider(2.0, 3.0, value=3.0, step=0.1, label="Opening minimum seconds")
-                    end_seconds = gr.Slider(4.0, 6.0, value=5.0, step=0.5, label="Ending seconds")
-                end_takeaway = gr.Textbox(label="Ending takeaway (up to 16 words)", lines=2)
-                end_question = gr.Textbox(label="Reflection question (up to 12 words)")
+                    intro_seconds = gr.Slider(2.0, 3.0, value=3.0, step=0.1, label="Minimum intro card seconds (extended to fit the spoken hook)")
+                    end_seconds = gr.Slider(4.0, 6.0, value=5.0, step=0.5, label="Minimum ending seconds (extended to fit the narration)")
+                end_takeaway = gr.Textbox(label="Ending takeaway, spoken (up to 16 words)", lines=2)
+                end_question = gr.Textbox(label="Reflection question, on screen (up to 12 words)")
                 source_credit = gr.Textbox(label="Source credit", value="Source lecture")
-                cta_text = gr.Textbox(value="Full lecture in description.", label="Ending CTA (up to 8 words)")
-                transition_seconds = gr.Slider(1.0, 2.0, value=1.5, step=0.1, label="Transition label / divider seconds")
+                cta_text = gr.Textbox(value="Full lecture in description.", label="Ending call to action, spoken (up to 8 words)")
+                transition_seconds = gr.Slider(1.0, 2.0, value=1.5, step=0.1, label="Minimum bridge card seconds (extended to fit the spoken label)")
                 join_groups, join_modes, join_labels = [], [], []
                 for index in range(MAX_KEEP - 1):
                     with gr.Row(visible=False) as join_group:
-                        join_modes.append(gr.Dropdown(TRANSITION_MODES, value="Cut", label=f"Join {index + 1} to {index + 2}"))
-                        join_labels.append(gr.Textbox(label=f"Join {index + 1} label (up to 8 words)"))
+                        join_modes.append(gr.Dropdown(TRANSITION_MODES, value="Divider", label=f"Join {index + 1} to {index + 2}"))
+                        join_labels.append(gr.Textbox(label=f"Bridge {index + 1} label, spoken (generated up to 4 words; up to 8 allowed)"))
                     join_groups.append(join_group)
                 storyboard_evidence = gr.Dataframe(headers=["clip", "source start", "source end", "source excerpt", "referenced by"],
                                                   interactive=False, wrap=True, label="Storyboard source evidence")
@@ -940,11 +1181,11 @@ def build_app():
                     pack_groups.append(pg)
                     pack_titles.append(pt)
                     pack_notes.append(pn)
-                preview_storyboard_btn = gr.Button("Preview storyboard", interactive=False)
+                preview_storyboard_btn = gr.Button("Preview storyboard")
                 storyboard_preview = gr.Video(label="Storyboard preview", interactive=False)
                 storyboard_reviewer = gr.Textbox(label="Storyboard reviewer name")
                 storyboard_attested = gr.Checkbox(label="I reviewed the preview and source context; claims, joins and text placement are supported.")
-                approve_storyboard_btn = gr.Button("Approve storyboard", variant="primary", interactive=False)
+                approve_storyboard_btn = gr.Button("Approve storyboard", variant="primary")
                 export_btn = gr.Button("Export compilation", variant="primary", interactive=False)
                 export_status = gr.Markdown(f"Confirm {MIN_KEEP}–{MAX_KEEP} clips before export.")
                 compilation_video = gr.Video(label="compilation.mp4", interactive=False)
@@ -959,70 +1200,50 @@ def build_app():
                 with gr.Row():
                     with gr.Column(scale=3):
                         assessment_video = gr.Video(label="Final exported video", interactive=False)
-                        assessment_post = gr.Textbox(label="Exported post", lines=5, interactive=False)
                     with gr.Column(scale=2):
-                        assessment_summary = gr.Markdown("No export selected.", elem_id="assessment-summary")
-                        assessment_files = gr.File(label="Assessment reports", file_count="multiple", interactive=False)
-                with gr.Accordion("Rating anchors", open=False):
-                    rubric = (ROOT / "docs" / "post-generation-rubric.md").read_text(encoding="utf-8")
-                    gr.Markdown(rubric.split("## Rating Anchors", 1)[1].split("## Evidence and Calculation", 1)[0])
-                reviewer_name = gr.Textbox(label="Reviewer name (new human assessment)")
-                rating_inputs, rating_evidence = [], []
-                score_choices = [("Not assessed", "not_assessed"), ("0 - Unacceptable", "0"),
-                                 ("1 - Major issues", "1"), ("2 - Needs revision", "2"),
-                                 ("3 - Acceptable", "3"), ("4 - Strong", "4")]
-                for label, weight in DIMENSIONS.values():
-                    with gr.Row():
-                        rating_inputs.append(gr.Dropdown(score_choices, value="not_assessed", label=f"{label} ({weight}%)", scale=1))
-                        rating_evidence.append(gr.Textbox(label=f"{label} evidence / timestamps", lines=2, scale=3))
-                gate_inputs, gate_evidence = [], []
-                for key in GATES:
-                    label = key.replace("_", " ").capitalize()
-                    with gr.Row():
-                        gate_inputs.append(gr.Dropdown(
-                            [("Not assessed", "not_assessed"), ("Pass", "pass"), ("Fail", "fail")],
-                            value="not_assessed", label=label, scale=1,
-                        ))
-                        gate_evidence.append(gr.Textbox(label=f"{label} evidence", lines=2, scale=3))
-                save_assessment = gr.Button("Calculate + save assessment", variant="primary")
+                        assessment_post = gr.Textbox(label="Exported post", lines=5, interactive=False)
+                rerun_assessment = gr.Button("Re-run checks")
+                assessment_summary = gr.HTML("No export selected.", elem_id="assessment-summary")
+                assessment_files = gr.File(label="Assessment reports", file_count="multiple", interactive=False)
 
-        assessment_fields = [reviewer_name, *rating_inputs, *rating_evidence, *gate_inputs, *gate_evidence]
         storyboard_fields = [intro_title, intro_subtitle, intro_seconds, end_takeaway, end_question,
                              source_credit, cta_text, end_seconds, transition_seconds, *join_modes, *join_labels,
                              overlay_position, aspect_ratio]
         storyboard_reset_outputs = [state, storyboard_status, storyboard_preview, storyboard_attested, export_btn]
         storyboard_draft_outputs = [*storyboard_reset_outputs, storyboard_evidence, *storyboard_fields[:-1], *join_groups]
-        state.change(storyboard_control_updates, [state], [preview_storyboard_btn, approve_storyboard_btn],
-                 concurrency_id="audience_pipeline")
+        quote_button.click(refresh_cloud_quote, [], [quote_state, quote_view, cloud_consent],
+                   concurrency_id="audience_pipeline")
+        cloud_consent.input(approve_cloud_budget,
+                    [state, quote_state, cloud_consent, aspect_ratio, *cids, *titles, *takeaways, *starts, *ends, *keeps],
+                    [state], concurrency_id="audience_pipeline")
         for field in [state, *storyboard_fields]:
             field.change(storyboard_duration_status, [state, *storyboard_fields], [storyboard_duration],
                           concurrency_id="audience_pipeline")
-        preview_storyboard_btn.click(preview_package_storyboard, [state, *storyboard_fields], storyboard_reset_outputs,
+        preview_storyboard_btn.click(preview_or_generate_storyboard, [state, model, *storyboard_fields], storyboard_draft_outputs,
                                      concurrency_id="audience_pipeline")
         approve_storyboard_btn.click(approve_package_storyboard,
                                      [state, storyboard_attested, storyboard_reviewer, *storyboard_fields],
                                      [state, storyboard_status, export_btn], concurrency_id="audience_pipeline")
         for field in storyboard_fields:
-            field.input(invalidate_package_storyboard, [state], storyboard_reset_outputs, concurrency_id="audience_pipeline")
+            field.input(invalidate_edited_storyboard, [state, *storyboard_fields], storyboard_reset_outputs,
+                        concurrency_id="audience_pipeline")
         for field in (storyboard_reviewer, storyboard_attested):
             field.input(revoke_storyboard_approval, [state], [state, storyboard_status, export_btn],
                          concurrency_id="audience_pipeline")
         assessment_outputs = [assessment_summary, assessment_files]
-        assessment_load_outputs = [assessment_context, assessment_video, assessment_post, *assessment_outputs, *assessment_fields]
+        assessment_load_outputs = [assessment_context, assessment_video, assessment_post, *assessment_outputs]
         assessment_export.change(
-            load_assessment_export, [assessment_export], assessment_load_outputs,
+            load_objective_assessment, [assessment_export], assessment_load_outputs,
             concurrency_id="assessment_review",
         )
         refresh_exports.click(refresh_assessment_exports, [], [assessment_export]).success(
-            load_assessment_export, [assessment_export], assessment_load_outputs,
+            load_objective_assessment, [assessment_export], assessment_load_outputs,
             concurrency_id="assessment_review",
         )
-        save_assessment.click(
-            save_ui_assessment, [assessment_context, assessment_export, *assessment_fields], assessment_outputs,
+        rerun_assessment.click(
+            rerun_objective_assessment, [assessment_context, assessment_export], assessment_outputs,
             concurrency_id="assessment_review",
         )
-        for field in assessment_fields:
-            field.input(invalidate_ui_assessment, [], assessment_outputs, concurrency_id="assessment_review")
 
         review_outputs = []
         for index in range(MAX_REVIEW):
@@ -1031,7 +1252,7 @@ def build_app():
             )
         transcribe_btn.click(
             transcribe_for_audience,
-            [video, target_audience, source_url, min_s, max_s, aspect_ratio, model, state],
+            [video, target_audience, source_url, min_s, max_s, aspect_ratio, model, state, whisper_model],
             [state, input_status, transcript_view, cand_status, cand_table, kept_md, confirm_btn, export_btn, *review_outputs],
             concurrency_id="audience_pipeline",
         ).success(invalidate_package_storyboard, [state], storyboard_reset_outputs, concurrency_id="audience_pipeline")
@@ -1047,7 +1268,7 @@ def build_app():
             nominate_outputs.extend(
                 [groups[i], previews[i], cids[i], titles[i], takeaways[i], metas[i], starts[i], ends[i], keeps[i]]
             )
-        nominate_btn.click(nominate_for_audience, [state, model, target_audience, min_s, max_s],
+        nominate_btn.click(nominate_for_audience, [state, model, target_audience, min_s, max_s, auto_select_box],
                    nominate_outputs, concurrency_id="audience_pipeline").success(
                        invalidate_package_storyboard, [state], storyboard_reset_outputs, concurrency_id="audience_pipeline")
         target_audience.input(change_target_audience, [target_audience, state], nominate_outputs,
@@ -1066,7 +1287,7 @@ def build_app():
             btn.click(bind_refresh(i), [starts[i], ends[i], state], [previews[i]])
 
         for box in keeps:
-            box.change(count_kept, [state, *keeps], [state, kept_md, confirm_btn, export_btn], concurrency_id="audience_pipeline")
+            box.input(count_kept, [state, *keeps], [state, kept_md, confirm_btn, export_btn], concurrency_id="audience_pipeline")
 
         for field in [*titles, *takeaways, *starts, *ends]:
             field.input(count_kept, [state, *keeps], [state, kept_md, confirm_btn, export_btn], concurrency_id="audience_pipeline")
@@ -1078,9 +1299,15 @@ def build_app():
         for i in range(MAX_KEEP):
             confirm_outputs.extend([pack_groups[i], pack_titles[i], pack_notes[i]])
         confirm_btn.click(
-            confirm_and_generate_storyboard,
+            confirm_and_generate_with_rows,
             [state, aspect_ratio, model, *cids, *titles, *takeaways, *starts, *ends, *keeps],
-            [*confirm_outputs, *storyboard_draft_outputs],
+            [*confirm_outputs, *storyboard_draft_outputs, *titles, *takeaways, *starts, *ends, *keeps, fit_report_view],
+            concurrency_id="audience_pipeline",
+        )
+        draft_storyboard_btn.click(
+            confirm_and_generate_with_rows,
+            [state, aspect_ratio, model, *cids, *titles, *takeaways, *starts, *ends, *keeps],
+            [*confirm_outputs, *storyboard_draft_outputs, *titles, *takeaways, *starts, *ends, *keeps, fit_report_view],
             concurrency_id="audience_pipeline",
         )
         for field in [*titles, *takeaways, *starts, *ends, *keeps, target_audience, min_s, max_s, video]:
@@ -1092,9 +1319,11 @@ def build_app():
             concurrency_id="audience_pipeline",
         ).success(refresh_assessment_exports, [compilation_video], [assessment_export])
         demo.load(ping_stack, [model], [model, stack_status])
+        demo.load(refresh_cloud_quote, [], [quote_state, quote_view, cloud_consent])
         demo.load(refresh_assessment_exports, [], [assessment_export])
     return demo
 
 
 if __name__ == "__main__":
-    build_app().queue().launch()
+    launch_options = {"css": ASSESSMENT_CSS} if "css" in inspect.signature(gr.Blocks.launch).parameters else {}
+    build_app().queue().launch(**launch_options)

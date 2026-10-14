@@ -21,6 +21,7 @@ def selection_revision(state: dict, clips: list[dict]) -> str:
         "objectives": state.get("objectives"),
         "target_audience": state.get("target_audience"),
         "audience_profile_version": state.get("audience_profile_version"),
+        "duration_budget": state.get("duration_budget"),
         "lecture_context": state.get("lecture_context"),
         "clips": [
             {key: clip.get(key) for key in ("id", "start", "end", "title", "takeaway", "excerpt")}
