@@ -19,6 +19,26 @@ describes the original prototype; current behavior is:
 See the root README for setup, licensing and tests. Old exports remain unchanged;
 old working drafts require audience selection and regeneration.
 
+### Intro and Bridge Renderer 2.0
+
+- Intros retain the concept artwork, with fixed, layout-aware shading behind text
+        rather than a full-frame veil. Intros and bridges reveal whole phrases with one
+        gentle entrance, then hold still; no decorative wedges, stars or background zoom.
+- Narrated bridges use the incoming clip's normalized source frame, preserving its
+        framing in both aspect ratios. Up to three samples within the first half-second
+        skip black frames. If none is usable, verified existing illustration assets are
+        reused, or a plain background when no artwork exists; extraction errors still fail.
+        Source frames and illustrations carry distinct labels. Dense slides still need
+        human visual review; the renderer does not infer their teaching content.
+- Bridge prompts connect both adjacent excerpts through a shared concept, example
+        or contrast, without implying unsupported causation. Labels remain at most four words.
+- Narration, clip ranges/order and the measured 30-60 second budget are unchanged.
+        The lower text-safe area is reserved for credits. The ending retains its two beats.
+- `CARD_RENDER_VERSION` participates in the preview/approval revision. Old previews
+        and approvals cannot authorize this renderer: preview again, review and approve.
+        Existing exported files are unchanged. Previewing cached media makes no new cloud
+        generation requests; regenerating storyboard text still requires the usual quote.
+
 `POC/pipeline/` 是教育短视频 Demo 的核心处理包：把一节长讲座视频变成 **3–5 条主题相关片段**，再拼成一条带片头、字幕和片尾 CTA 的合辑。
 
 Gradio 入口在 `POC/app.py`。本目录只负责算法与媒体处理，不包含 UI。

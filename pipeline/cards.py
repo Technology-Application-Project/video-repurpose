@@ -25,8 +25,12 @@ def card_look(audience: str) -> dict:
     return _presentation(audience)["look"]
 
 
-def card_motion(audience: str) -> dict:
-    return _presentation(audience)["motion"]
+def card_motion(audience: str, kind: str | None = None) -> dict:
+    motion = _presentation(audience)["motion"]
+    if kind in {"opening", "divider"}:
+        return {**motion, "zoom": 1.0, "fade": 0.3, "slide": 0.008, "ease": "quad",
+                "drift": False, "reveal": "block"}
+    return motion
 
 
 def _ease(kind: str, u: str) -> str:
@@ -142,7 +146,8 @@ def _accent_span(lines: list[str], accent: str):
 
 
 def fit_card(sections: list[tuple], width: int, height: int, *, opening: bool, audience: str,
-             ratio: float = TYPE_RATIO["ending"], accents: dict | None = None, badge: str | None = None) -> dict:
+             ratio: float = TYPE_RATIO["ending"], accents: dict | None = None, badge: str | None = None,
+             focused: bool = False) -> dict:
     """Lay out one beat. Never shrinks below a readable size; raises instead so wording can be corrected."""
     from PIL import Image, ImageDraw
     from pipeline.media import CREATIVE
@@ -150,12 +155,17 @@ def fit_card(sections: list[tuple], width: int, height: int, *, opening: bool, a
     accent = CREATIVE.get(audience, CREATIVE["General public"])["accent"]
     probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
     padding = max(8, round(width * 0.1 if opening else min(width, height) * 0.09))
-    available_width, available_height = width - padding * 2, height - padding * 2
+    safe_bottom = round(height * PORTRAIT_SAFE_BOTTOM)
+    available_width, available_height = width - padding * 2, safe_bottom - padding
     roles = _role_styles(audience, opening)
     kicker = next((text for text, role, _ in sections if role == "kicker"), "")
     stack = [section for section in sections if section[1] != "kicker"]
     initial = (max(14, min(110, round(width * 0.095))) if opening
                else max(14, min(100, round(min(width, height) * ratio))))
+    if focused:
+        short = min(width, height)
+        initial = max(14, min(72, round(short * (0.07 if opening else 0.055))))
+        available_height = min(available_height, round(min(height * 0.45, short * 0.6) if opening else short * 0.35))
     floor = min(initial, round(min(width, height) * 0.045))
     for size in range(initial, floor - 1, -1):
         gap = max(6, round(size * 0.6))
@@ -192,10 +202,12 @@ def fit_card(sections: list[tuple], width: int, height: int, *, opening: bool, a
             break
     else:
         raise ValueError("Card text does not fit at a readable size. Shorten the wording.")
-    top = (height - total) // 2
+    top = min((height - total) // 2, safe_bottom - total)
     if height > width:
         top = min(round(height * PORTRAIT_ANCHOR - total / 2), round(height * PORTRAIT_SAFE_BOTTOM) - total)
         top = max(padding, min(top, height - padding - total))
+    if focused:
+        top = safe_bottom - total
     if chip:
         chip["x"] = (width - chip["row_w"]) / 2 if opening else padding
         chip["y"] = top + (chip["row_h"] - chip["h"]) // 2
@@ -217,11 +229,12 @@ def check_card_text(kind: str, storyboard: dict, kickers: dict, *, number: int =
     for width, height in ((1280, 720), (720, 1280)):
         for beat in beats:
             fit_card(beat, width, height, opening=kind == "opening", audience=storyboard["audience"],
-                     ratio=TYPE_RATIO.get(kind, TYPE_RATIO["ending"]), badge=card_badge(kind, storyboard, number))
+                     ratio=TYPE_RATIO.get(kind, TYPE_RATIO["ending"]), badge=card_badge(kind, storyboard, number),
+                     focused=kind in {"opening", "divider"})
 
 
 def render_background(width: int, height: int, *, picture: Path | None, audience: str, opening: bool, mirror: bool = False,
-                      blur: bool = False):
+                      blur: bool = False, shade: bool = True):
     from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
     look = card_look(audience)
@@ -233,16 +246,41 @@ def render_background(width: int, height: int, *, picture: Path | None, audience
             image = ImageOps.mirror(image)
         if blur:  # a real frame can hold its own text; keep colour and mood, lose the detail
             image = image.filter(ImageFilter.GaussianBlur(max(6, round(min(width, height) * 0.03))))
-        scrim = Image.new("RGBA", image.size, (0, 0, 0, 0))
-        scrim_draw = ImageDraw.Draw(scrim)
-        centre, rim = look["alpha"]
-        for y in range(height):
-            edge = abs(y - height / 2) / (height / 2)
-            scrim_draw.line([(0, y), (width, y)], fill=(*look["scrim"], round(centre - (centre - rim) * edge ** 1.5)))
-        image = Image.alpha_composite(image, scrim)
+        if shade:
+            scrim = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            scrim_draw = ImageDraw.Draw(scrim)
+            centre, rim = look["alpha"]
+            for y in range(height):
+                edge = abs(y - height / 2) / (height / 2)
+                scrim_draw.line([(0, y), (width, y)], fill=(*look["scrim"], round(centre - (centre - rim) * edge ** 1.5)))
+            image = Image.alpha_composite(image, scrim)
     if not opening:
         ImageDraw.Draw(image).rectangle((0, 0, max(3, width // 150), height), fill=(*look["accent_text"], 255))
     return image
+
+
+def render_text_scrim(layout: dict):
+    from PIL import Image, ImageDraw, ImageFilter
+
+    width, height = layout["width"], layout["height"]
+    radius = max(3, round(min(width, height) * 0.012))
+    padding = radius * 3
+    mask = Image.new("L", (width, height))
+    draw = ImageDraw.Draw(mask)
+    bounds = []
+    chip = layout["chip"]
+    if chip:
+        bounds.append((chip["x"], chip["row_y"], chip["x"] + chip["row_w"], chip["row_y"] + chip["row_h"]))
+    for block in layout["blocks"]:
+        bounds.append((min(block["x"]), block["y"],
+                       max(left + span for left, span in zip(block["x"], block["widths"])),
+                       block["y"] + block["height"]))
+    if bounds:
+        top, bottom = min(box[1] for box in bounds), max(box[3] for box in bounds)
+        draw.rectangle((-padding, top - padding, width + padding, bottom + padding), fill=245)
+    layer = Image.new("RGBA", (width, height), (*layout["look"]["scrim"], 0))
+    layer.putalpha(mask.filter(ImageFilter.GaussianBlur(radius)))
+    return layer
 
 
 def decor_layers(audience: str, width: int, height: int, work: Path, name: str, seconds: float) -> list[dict]:
@@ -404,16 +442,20 @@ def build_card(kind: str, storyboard: dict, kickers: dict, work: Path, name: str
     beats, corner = card_beats(kind, storyboard, kickers, number=number, narration=narrated)
     accents = card_accents(kind, storyboard, number)
     badge = card_badge(kind, storyboard, number)
+    focused = kind in {"opening", "divider"}
     layouts = [fit_card(beat, width, height, opening=opening, audience=audience,
-                        ratio=TYPE_RATIO.get(kind, TYPE_RATIO["ending"]), accents=accents, badge=badge) for beat in beats]
+                        ratio=TYPE_RATIO.get(kind, TYPE_RATIO["ending"]), accents=accents, badge=badge,
+                        focused=focused) for beat in beats]
     media = storyboard.get("media_assets") or {}
     picture, mirror = still, False
-    if media:
+    if kind == "divider" and still is not None:
+        corner = ["Source frame"]
+    elif media:
         if opening:
             picture = Path(media["opening"]["path"])
         elif kind == "divider":
             slot = number - 2
-            picture, mirror = Path(media["opening" if slot % 2 == 0 else "ending"]["path"]), (slot // 2) % 2 == 1
+            picture = Path(media["opening" if slot % 2 == 0 else "ending"]["path"])
         else:
             picture = Path(media["ending"]["path"])
     elif kind == "ending":
@@ -421,7 +463,7 @@ def build_card(kind: str, storyboard: dict, kickers: dict, work: Path, name: str
     background = work / f"{name}_bg.png"
     background.parent.mkdir(parents=True, exist_ok=True)
     render_background(width, height, picture=picture, audience=audience, opening=opening, mirror=mirror,
-                      blur=still is not None and not media).save(background)
+                      blur=False, shade=not focused).save(background)
 
     speech_from = 0.15
     speech_to = speech_from + (narration_seconds if narrated else max(0.6, (duration - 0.2) * 0.6))
@@ -434,10 +476,15 @@ def build_card(kind: str, storyboard: dict, kickers: dict, work: Path, name: str
         windows = [(0.0, switch, speech_from, split), (switch, duration, split, speech_to)]
     else:
         windows = [(0.0, duration, speech_from, speech_to)]
-    layers = decor_layers(audience, width, height, work, name, card_motion(audience)["decor_seconds"]) \
-        if opening or picture is not None else []
+    layers = []
+    if focused:
+        png = work / f"{name}_scrim.png"
+        render_text_scrim(layouts[0]).save(png)
+        layers.append({"png": png, "start": 0.0, "end": None, "slide": False, "static": True})
+    elif picture is not None:
+        layers = decor_layers(audience, width, height, work, name, card_motion(audience)["decor_seconds"])
     for layout, (begin, end, from_, to_) in zip(layouts, windows):
-        timed = _beat_times(layout, begin, end, from_, to_, card_motion(audience)["reveal"])
+        timed = _beat_times(layout, begin, end, from_, to_, card_motion(audience, kind)["reveal"])
         grouped: dict[float, list] = {}
         for moment, step in sorted(timed, key=lambda item: item[0]):
             grouped.setdefault(round(moment, 2), []).append(step)
@@ -455,9 +502,9 @@ def build_card(kind: str, storyboard: dict, kickers: dict, work: Path, name: str
 
 def animated_card_video(background: Path, layers: list[dict], dest: Path, width: int, height: int, seconds: float,
                         fps: int = 30, *, audio: Path | None = None, drift: int = 0,
-                        audience: str = "General public") -> Path:
+                        audience: str = "General public", kind: str | None = None) -> Path:
     frames = max(1, round(seconds * fps))
-    motion = card_motion(audience)
+    motion = card_motion(audience, kind)
     fade, ease = motion["fade"], motion["ease"]
     # The pan range grows with the zoom, so the drift is a fraction of it: 0.5 centred, +/- moves left or right.
     pan = (f"(iw-iw/zoom)*({0.5 - DRIFT_SPAN / 2 * drift:.3f}+{DRIFT_SPAN * drift:.3f}*min(on/{frames},1))"
@@ -473,6 +520,10 @@ def animated_card_video(background: Path, layers: list[dict], dest: Path, width:
     filters = [f"[0:v]{zoom}[v0]"]
     for index, layer in enumerate(layers, 1):
         start, fx = layer["start"], layer.get("fx")
+        if layer.get("static"):
+            filters.append(f"[{index}:v]format=rgba[l{index}]")
+            filters.append(f"[v{index - 1}][l{index}]overlay=x=0:y=0[v{index}]")
+            continue
         if fx:
             eased = _ease(ease, f"clip((t-{start:.3f})/{fx['seconds']:.3f},0,1)")
             if fx["kind"] == "slide":

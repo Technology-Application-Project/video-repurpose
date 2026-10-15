@@ -786,6 +786,22 @@ def _storyboard_panel(dest: Path, sections: list[tuple[str, str]], width: int, h
     return dest
 
 
+def _bridge_frame(source: Path, destination: Path) -> tuple[Path | None, float | None]:
+    from PIL import Image
+
+    duration = media_duration(source)
+    offsets = sorted({0.0, min(0.25, duration / 4), min(0.5, duration / 2)})
+    for offset in offsets:
+        destination.unlink(missing_ok=True)
+        run_cmd([ffmpeg_bin(), "-y", "-ss", str(offset), "-i", str(source), "-frames:v", "1", str(destination)])
+        if destination.exists():
+            with Image.open(destination) as image:
+                if image.convert("L").getextrema()[1] > 8:
+                    return destination, offset
+    destination.unlink(missing_ok=True)
+    return None, None
+
+
 def _assemble_storyboard(raw_clips: list[Path], dest: Path, clips: list[dict], segments: list[dict],
                          storyboard: dict, width: int, height: int, work: Path, srt_path: Path | None,
                          narration_cache: Path | None = None, approved_assets: dict | None = None) -> Path:
@@ -826,9 +842,10 @@ def _assemble_storyboard(raw_clips: list[Path], dest: Path, clips: list[dict], s
             clip_index += 1
             continue
         still = None
-        if item["kind"] == "divider" and not storyboard.get("media_assets"):
-            still = work / f"next_frame_{index}.png"
-            run_cmd([ffmpeg_bin(), "-y", "-i", str(raw_clips[clip_index]), "-frames:v", "1", str(still)])
+        if item["kind"] == "divider":
+            still, offset = _bridge_frame(normalized[clip_index], work / f"next_frame_{index}.png")
+            item["background"] = {"kind": "source_frame" if still else "illustration" if storyboard.get("media_assets") else "plain",
+                                  "clip_id": clips[clip_index]["id"], "clip_offset": offset}
         narration = None
         narration_text = ""
         card_seconds = item["duration"]
@@ -853,7 +870,8 @@ def _assemble_storyboard(raw_clips: list[Path], dest: Path, clips: list[dict], s
                                               number=clip_index + 1, still=still)
         card = cards.animated_card_video(background, layers, work / f"card_{index}.mp4", width, height, card_seconds,
                                          audio=narration, audience=storyboard["audience"],
-                                         drift=cards.card_drift(item["kind"], clip_index + 1, storyboard["audience"]))
+                                         drift=cards.card_drift(item["kind"], clip_index + 1, storyboard["audience"]),
+                                         kind=item["kind"])
         actual_duration = media_duration(card)
         difference = actual_duration - item["duration"]
         item["duration"] = actual_duration

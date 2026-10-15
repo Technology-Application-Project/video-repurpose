@@ -9,6 +9,7 @@ from pipeline.cloud import request_text
 
 
 STORYBOARD_VERSION = "2.0"
+CARD_RENDER_VERSION = "2.0"
 DURATION_BUDGET = {"min_seconds": 30, "max_seconds": 60}
 PREVIOUS_DURATION_BUDGET = {"min_seconds": 60, "max_seconds": 90}
 LEGACY_DURATION_BUDGET = {"min_seconds": 45, "max_seconds": 120}
@@ -54,17 +55,17 @@ _THROAT_CLEARING = re.compile(
 AUDIENCE_PRESENTATION = {
     "Researcher": {
         "hook": "A precise, intriguing research question or counterintuitive finding that names the specific phenomenon; sober, no hype words.",
-        "bridge": "Frame the next excerpt as the next piece of evidence, a complication or a contrasting case.",
+        "bridge": "Connect the preceding evidence to the next example, complication or contrasting case; name the shared concept.",
         "ending": "State the supported conclusion with its key limitation, then pose one testable follow-up question.",
     },
     "General public": {
         "hook": "A vivid, relatable question or surprising contrast about everyday stakes such as money, jobs, family or time.",
-        "bridge": "Tease the next point with a curiosity gap that its excerpt answers.",
+        "bridge": "Connect the previous point to a concrete next example or contrast, using a short natural question when helpful.",
         "ending": "One memorable takeaway line, then one concrete action the viewer can take.",
     },
     "Kids": {
         "hook": "A playful 'What if...?' or 'Did you know...?' question about a concrete image ages 8-12 know.",
-        "bridge": "A short, excited teaser such as 'But wait, how...?' using simple words.",
+        "bridge": "Link the previous idea to the next familiar example with a short concrete question, not a generic excited teaser.",
         "ending": "A fun 'big idea' sentence in simple words, then one tiny safe challenge.",
     },
 }
@@ -92,6 +93,7 @@ def draft_storyboard(clips: list[dict], audience: str, source_url: str = "") -> 
     takeaway = str(clips[-1].get("takeaway") or "").strip()
     return {
         "version": STORYBOARD_VERSION,
+        "card_render_version": CARD_RENDER_VERSION,
         "style": "lecture-overlay-v1",
         "audience": audience,
         "narration_profile": resolve_narration_profile(audience),
@@ -233,8 +235,9 @@ def generate_storyboard(model: str, clips: list[dict], audience: str, source_url
         "Takeaway <=16 words, reflection question <=12 words; takeaway + question + CTA <=28 words "
         "and <=5 words per ending second. Ending is 4-6 seconds. Cite supporting clip IDs for opening/ending. "
         "Provide exactly one transition per join in order; cite only the two neighboring clip IDs. "
-        "Each bridge must build anticipation for the FOLLOWING excerpt using a specific idea from it, "
-        "with a concise question or meaningful contrast when supported. Avoid generic labels like 'Next topic'. "
+        "Each bridge must connect BOTH neighboring excerpts: name a shared concept and introduce the following "
+        "example, continuation or contrast. Use a concise question when helpful. Do not imply causation merely "
+        "because clips are adjacent. Avoid generic labels like 'Next topic' or 'But wait, how?'. "
         "For a single selected clip, return an empty transitions array; do not invent a second clip or a divider. "
         "Use Divider for every join: a separate transition frame backed by the following clip's image. "
         "For continuing ideas, introduce the next example or detail without inventing a topic change. "
@@ -354,7 +357,7 @@ def validate_storyboard(storyboard: dict, clips: list[dict]) -> None:
 
 
 def storyboard_revision(selection: str, storyboard: dict) -> str:
-    encoded = json.dumps({"selection": selection, "storyboard": storyboard}, sort_keys=True,
+    encoded = json.dumps({"selection": selection, "storyboard": storyboard, "card_render_version": CARD_RENDER_VERSION}, sort_keys=True,
                          ensure_ascii=False, allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 

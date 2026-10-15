@@ -799,6 +799,8 @@ def _read_storyboard(state, values):
         raise gr.Error("Incomplete storyboard controls.")
     title, subtitle, opening_seconds, takeaway, question, credit, cta, ending_seconds, join_seconds = values[:9]
     draft = copy.deepcopy(state["storyboard_draft"])
+    from pipeline.storyboard import CARD_RENDER_VERSION
+    draft["card_render_version"] = CARD_RENDER_VERSION
     draft["aspect_ratio"] = values[-1]
     draft["overlay_position"] = values[-2]
     draft["source_url"] = state.get("source_url") or ""
