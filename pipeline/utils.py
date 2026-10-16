@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -29,8 +30,14 @@ FONT_CANDIDATES = [
 ]
 
 
-def new_run_id() -> str:
-    return uuid.uuid4().hex[:10]
+def new_run_id(video_name: str | Path | None = None) -> str:
+    """Random ID, prefixed with a filesystem-safe version of the video's name when given."""
+    suffix = uuid.uuid4().hex[:10]
+    stem = Path(video_name).stem if video_name else ""
+    stem = stem.removesuffix("_playable").replace("đ", "d").replace("Đ", "D")
+    ascii_stem = unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", ascii_stem).strip("-_")[:40].rstrip("-_")
+    return f"{slug}_{suffix}" if slug else suffix
 
 
 def run_dir(run_id: str) -> Path:

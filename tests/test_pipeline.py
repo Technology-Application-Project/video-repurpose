@@ -193,7 +193,7 @@ class StoryboardTests(unittest.TestCase):
 
     def test_generated_storyboard_uses_all_excerpts_and_audience(self):
         response = {"message": {"content": json.dumps(self.generated_response())}}
-        with patch("pipeline.storyboard.ollama.chat", return_value=response) as chat:
+        with patch("pipeline.llm.ollama.chat", return_value=response) as chat:
             draft = generate_storyboard("model", self.generation_clips(), "Students")
         self.assertEqual(draft["generation"]["status"], "model_draft")
         self.assertEqual(draft["ending"]["evidence_ids"], ["c0", "c1"])
@@ -207,15 +207,15 @@ class StoryboardTests(unittest.TestCase):
         invalid["ending"]["evidence_ids"] = ["invented"]
         bad = {"message": {"content": json.dumps(invalid)}}
         good = {"message": {"content": json.dumps(self.generated_response())}}
-        with patch("pipeline.storyboard.ollama.chat", side_effect=[bad, good]):
+        with patch("pipeline.llm.ollama.chat", side_effect=[bad, good]):
             self.assertEqual(generate_storyboard("model", self.generation_clips(), "Students")["generation"]["attempts"], 2)
-        with patch("pipeline.storyboard.ollama.chat", return_value=bad) as chat:
+        with patch("pipeline.llm.ollama.chat", return_value=bad) as chat:
             with self.assertRaisesRegex(ValueError, "two attempts"):
                 generate_storyboard("model", self.generation_clips(), "Students")
             self.assertEqual(chat.call_count, 2)
 
     def test_generated_budget_counts_dividers_and_blocks_impossible_selection(self):
-        with patch("pipeline.storyboard.ollama.chat") as chat:
+        with patch("pipeline.llm.ollama.chat") as chat:
             with self.assertRaisesRegex(ValueError, "cannot fit"):
                 generate_storyboard("model", self.clips()[:2], "Students")
             chat.assert_not_called()
@@ -277,7 +277,7 @@ class StoryboardTests(unittest.TestCase):
         response["transitions"] = []
         for section in ("opening", "ending"):
             response[section]["evidence_ids"] = ["c0"]
-        with patch("pipeline.storyboard.ollama.chat", return_value={"message": {"content": json.dumps(response)}}) as chat:
+        with patch("pipeline.llm.ollama.chat", return_value={"message": {"content": json.dumps(response)}}) as chat:
             draft = generate_storyboard("model", clips, "Students")
         self.assertEqual(draft["transitions"], [])
         transition_schema = chat.call_args.kwargs["format"]["properties"]["transitions"]
@@ -286,7 +286,7 @@ class StoryboardTests(unittest.TestCase):
         timeline = storyboard_timeline(clips, [40], draft)
         self.assertEqual([item["kind"] for item in timeline], ["opening", "clip", "ending"])
         self.assertEqual(timeline[-1]["start"] + timeline[-1]["duration"], 48)
-        with patch("pipeline.storyboard.ollama.chat") as chat:
+        with patch("pipeline.llm.ollama.chat") as chat:
             with self.assertRaisesRegex(ValueError, "cannot fit"):
                 generate_storyboard("model", [dict(clips[0], end=30)], "Students")
             chat.assert_not_called()
@@ -563,7 +563,7 @@ class EditorialTests(unittest.TestCase):
         candidate = {"id": "c1", "start": 0, "end": 20}
         response = {"message": {"content": json.dumps({"candidates": [candidate] * 3})}}
         reviewed = {**candidate, "end": 30, "editorial_status": "estimated", "score": 75}
-        with patch("pipeline.nominate.ollama.chat", return_value=response), patch(
+        with patch("pipeline.llm.ollama.chat", return_value=response), patch(
             "pipeline.editorial.review_candidate", return_value=reviewed
         ), patch("pipeline.nominate._describe_candidate", side_effect=lambda model, item, segments: item) as describe:
             result = nominate_candidates("model", "Topic", ["Goal"], self.segments(), 10, 30, 30,
@@ -636,7 +636,7 @@ class PipelineTests(unittest.TestCase):
         metadata = {"title": "Problem-first thinking", "takeaway": "The speaker focuses on problems.",
                     "quote": "We focus on problems."}
         response = SimpleNamespace(message=SimpleNamespace(content=json.dumps(metadata)))
-        with patch("pipeline.nominate.ollama.chat", return_value=response) as chat:
+        with patch("pipeline.llm.ollama.chat", return_value=response) as chat:
             result = _describe_candidate("test-model", candidate, segments)
         self.assertEqual(json.loads(chat.call_args.kwargs["messages"][1]["content"]),
                          {"excerpt": "We focus on problems."})
@@ -655,14 +655,14 @@ class PipelineTests(unittest.TestCase):
                    json.dumps({"title": 123, "takeaway": "Claim", "quote": "Actual speech."}),
                    json.dumps({"title": "Title", "takeaway": " ", "quote": "Actual speech."})]
         for content in invalid:
-            with self.subTest(content=content), patch("pipeline.nominate.ollama.chat", return_value={"message": {"content": content}}):
+            with self.subTest(content=content), patch("pipeline.llm.ollama.chat", return_value={"message": {"content": content}}):
                 result = _describe_candidate("test-model", candidate, segments)
                 self.assertEqual(result["metadata_status"], "unavailable")
                 self.assertEqual(result["title"], "Clip at 0.000s")
                 self.assertEqual((result["takeaway"], result["quote"]), ("", ""))
-        with patch("pipeline.nominate.ollama.chat", side_effect=RuntimeError("Offline")):
+        with patch("pipeline.llm.ollama.chat", side_effect=RuntimeError("Offline")):
             self.assertEqual(_describe_candidate("test-model", candidate, segments)["metadata_status"], "unavailable")
-        with patch("pipeline.nominate.ollama.chat") as chat:
+        with patch("pipeline.llm.ollama.chat") as chat:
             self.assertEqual(_describe_candidate("test-model", candidate, [])["metadata_status"], "unavailable")
             chat.assert_not_called()
 
@@ -672,7 +672,7 @@ class PipelineTests(unittest.TestCase):
         raw = [{"start": 1, "end": 19}, {"start": 20, "end": 40},
                {"start": 40, "end": 60}, {"start": 0, "end": 60}]
         response = {"message": {"content": json.dumps({"candidates": raw})}}
-        with patch("pipeline.nominate.ollama.chat", return_value=response), patch(
+        with patch("pipeline.llm.ollama.chat", return_value=response), patch(
             "pipeline.nominate._describe_candidate", side_effect=lambda model, candidate, segments: candidate
         ) as describe:
             result = nominate_candidates("test-model", "Topic", ["Goal"], segments, 20, 45, 60)

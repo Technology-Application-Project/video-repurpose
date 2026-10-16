@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 
-import ollama
+from pipeline import llm
 
 
 STORYBOARD_VERSION = "1.0"
@@ -121,7 +121,7 @@ def generate_storyboard(model: str, clips: list[dict], audience: str, source_url
     messages = [{"role": "system", "content": instruction}, {"role": "user", "content": json.dumps(payload)}]
     last_error = ""
     for attempt in range(2):
-        response = ollama.chat(model=model, format=schema, options={"temperature": 0, "num_ctx": 16384}, messages=messages)
+        response = llm.chat(model=model, format=schema, options={"temperature": 0, "num_ctx": 16384}, messages=messages)
         content = response["message"]["content"]
         try:
             result = json.loads(content)

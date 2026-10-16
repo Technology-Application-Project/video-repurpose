@@ -21,6 +21,7 @@ from pipeline.cut import cut_clip, make_preview
 from pipeline.assess import DIMENSIONS, GATES, RUBRIC_VERSION, artifact_hashes, assess_export, assessment_markdown, export_context, score_review
 from pipeline.contracts import selection_revision, validate_range
 from pipeline.export import DEFAULT_CTA, EXPORT_STEPS, export_clips
+from pipeline import llm
 from pipeline.editorial import EDITORIAL_VERSION, infer_lecture_context
 from pipeline.nominate import list_ollama_models, nominate_candidates
 from pipeline.rank import rank_candidates
@@ -103,7 +104,7 @@ def empty_state() -> dict:
     }
 
 
-def ping_stack(current_model: str | None):
+def ping_stack(current_model: str | None, provider: str = llm.PROVIDER_OLLAMA):
     notes = []
     try:
         ffmpeg_bin()
@@ -111,16 +112,28 @@ def ping_stack(current_model: str | None):
     except Exception as exc:
         notes.append(f"ffmpeg missing: {exc}")
 
+    if provider == llm.PROVIDER_CLAUDE:
+        models, claude_msg = llm.list_claude_models()
+        notes.append(claude_msg)
+        value = current_model if current_model in models else models[0]
+        return gr.update(choices=models, value=value, label="Claude model"), " · ".join(notes)
+
     models, ollama_msg = list_ollama_models()
     notes.append(ollama_msg)
     if not models:
-        return gr.update(choices=["qwen2.5"], value="qwen2.5"), " · ".join(notes)
+        return gr.update(choices=["qwen2.5"], value="qwen2.5", label="Ollama model"), " · ".join(notes)
 
     value = current_model if current_model in models else models[0]
     if current_model and current_model not in models:
         exact = next((m for m in models if m.lower() in {"qwen2.5", "qwen2.5:latest"}), None)
         value = exact or next((m for m in models if "qwen2.5" in m.lower()), models[0])
-    return gr.update(choices=models, value=value), " · ".join(notes)
+    return gr.update(choices=models, value=value, label="Ollama model"), " · ".join(notes)
+
+
+def change_provider(provider, api_key, current_model):
+    llm.set_api_key(api_key)
+    model_update, status = ping_stack(current_model, provider)
+    return model_update, gr.update(visible=provider == llm.PROVIDER_CLAUDE), status
 
 
 def _blank_row():
@@ -270,7 +283,7 @@ def transcribe(video, topic, objectives_text, source_url, min_s, max_s, aspect_r
     tracker = StepProgress(progress, 1 + TRANSCRIBE_STEPS)
     tracker.step("Saving source video")
     ffmpeg_bin()
-    run_id = new_run_id()
+    run_id = new_run_id(path)
     work = run_dir(run_id)
     suffix = Path(path).suffix or ".mp4"
     stored = work / f"source{suffix}"
@@ -358,12 +371,16 @@ def nominate_and_rank(state, model, progress=gr.Progress()):
     state = dict(state or empty_state())
     if not state.get("transcript"):
         raise gr.Error("Run transcription first.")
-    models, msg = list_ollama_models()
-    if not models:
-        raise gr.Error(msg)
+    selected_model = model or state.get("model") or "qwen2.5"
+    if llm.is_claude(selected_model):
+        if not llm.has_api_key():
+            raise gr.Error("Enter an Anthropic API key to use Claude models.")
+    else:
+        models, msg = list_ollama_models()
+        if not models:
+            raise gr.Error(msg)
 
     segments = state["transcript"]["segments"]
-    selected_model = model or state.get("model") or "qwen2.5"
     audience = state.get("target_audience")
     needs_context = bool(audience) and (not state.get("lecture_context")
                                         or state["lecture_context"].get("status") == "unavailable"
@@ -722,7 +739,7 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
         return
     yield state, "Generating storyboard from all selected excerpts...", None, False, gr.update(interactive=False), *unchanged
     try:
-        StepProgress(progress).step("Generating storyboard with Ollama")
+        StepProgress(progress).step(f"Generating storyboard with {llm.provider_name(model or state.get('model'))}")
         draft = generate_storyboard(model or state.get("model") or "qwen2.5", clips,
                                     state.get("target_audience", DEFAULT_AUDIENCE), state.get("source_url") or "")
         result = draft_package_storyboard(state, aspect_ratio, generated=draft)
@@ -983,10 +1000,10 @@ def build_app():
         state = gr.State(empty_state())
         gr.Markdown(
             "# Educational Short Clip Demo\n"
-            "Transcribe a long lecture, let Ollama nominate clips, rank them against "
+            "Transcribe a long lecture, let Ollama or Claude nominate clips, rank them against "
             f"audience needs, **human-keep {MIN_KEEP}–{MAX_KEEP} on-topic clips**, then package for social."
         )
-        stack_status = gr.Markdown("Checking Ollama and ffmpeg...")
+        stack_status = gr.Markdown("Checking the AI model and ffmpeg...")
 
         with gr.Tabs():
             with gr.Tab("1. Input"):
@@ -1003,6 +1020,10 @@ def build_app():
                         label="Aspect ratio",
                     )
                     model = gr.Dropdown(["qwen2.5"], value="qwen2.5", label="Ollama model", allow_custom_value=True)
+                with gr.Row():
+                    provider = gr.Radio(llm.PROVIDERS, value=llm.PROVIDER_OLLAMA, label="AI provider")
+                    api_key = gr.Textbox(label="Anthropic API key (kept in memory only, cleared on restart)",
+                                         type="password", placeholder="sk-ant-...", visible=False)
                 transcribe_btn = gr.Button("Run transcription", variant="primary")
                 input_status = gr.Markdown("Upload a video, then transcribe.")
 
@@ -1296,6 +1317,9 @@ def build_app():
             [state, export_status, compilation_video, post_view, zip_file],
             concurrency_id="audience_pipeline",
         ).success(refresh_assessment_exports, [compilation_video], [assessment_export])
+        provider.change(change_provider, [provider, api_key, model], [model, api_key, stack_status])
+        api_key.change(llm.set_api_key, [api_key], None)
+        api_key.blur(ping_stack, [model, provider], [model, stack_status])
         demo.load(ping_stack, [model], [model, stack_status])
         demo.load(load_remake_voices, [], [remake_voice])
         demo.load(refresh_assessment_exports, [], [assessment_export])

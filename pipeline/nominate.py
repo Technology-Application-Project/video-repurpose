@@ -6,6 +6,7 @@ from pathlib import Path
 
 import ollama
 
+from pipeline import llm
 from pipeline.contracts import validate_range
 from pipeline.transcribe import transcript_as_text
 from pipeline.utils import ROOT, excerpt_for_range, snap_to_segments
@@ -186,7 +187,7 @@ def _describe_candidate(model: str, candidate: dict, segments: list[dict]) -> di
     if not excerpt.strip():
         return described
     try:
-        response = ollama.chat(
+        response = llm.chat(
             model=model,
             messages=[
                 {
@@ -256,7 +257,7 @@ def nominate_candidates(
     collected: list[dict] = []
     last_error = None
     chunks = _chunk_segments(segments)
-    tracker.step("Nominating clips with Ollama")
+    tracker.step(f"Nominating clips with {llm.provider_name(model)}")
     for done, chunk in enumerate(chunks):
         tracker.count(done, len(chunks), "chunks")
         user_prompt = (
@@ -272,7 +273,7 @@ def nominate_candidates(
                 "lecture_concepts": lecture_context or {},
             }, ensure_ascii=False)
         try:
-            response = ollama.chat(
+            response = llm.chat(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -293,8 +294,8 @@ def nominate_candidates(
         candidates = _normalize_candidates(candidates, segments, min_s, max_s, duration)
 
     if not candidates:
-        detail = f" Last Ollama error: {last_error}" if last_error else ""
-        raise RuntimeError("Ollama returned no usable clip candidates." + detail)
+        detail = f" Last {llm.provider_name(model)} error: {last_error}" if last_error else ""
+        raise RuntimeError(f"{llm.provider_name(model)} returned no usable clip candidates." + detail)
     if target_audience:
         from pipeline.editorial import review_candidate
 

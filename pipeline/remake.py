@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import ollama
-
+from pipeline import llm
 from pipeline.nominate import _chunk_segments
 from pipeline.progress import NO_PROGRESS, StepProgress
 from pipeline.utils import save_json
@@ -45,7 +44,7 @@ def _condense_long_transcript(model: str, segments: list[dict], tracker: StepPro
     chunks = _chunk_segments(segments, max_chars=9000)
     for done, chunk in enumerate(chunks):
         tracker.count(done, len(chunks), "chunks")
-        response = ollama.chat(
+        response = llm.chat(
             model=model,
             options={"temperature": 0, "num_ctx": 16384},
             messages=[
@@ -145,10 +144,10 @@ def remake_transcript(
     ]
 
     last_error = ""
-    tracker.step("Writing the script with Ollama")
+    tracker.step(f"Writing the script with {llm.provider_name(model)}")
     for attempt in range(2):
         tracker.count(attempt, 2, "attempts")
-        response = ollama.chat(
+        response = llm.chat(
             model=model,
             format=_schema(),
             options={"temperature": 0.7, "num_ctx": 16384},

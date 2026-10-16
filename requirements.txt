@@ -5,3 +5,4 @@ whisperx
 pillow
 kokoro-onnx
 soundfile
+anthropic
