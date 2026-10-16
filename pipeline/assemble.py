@@ -292,38 +292,16 @@ def _render_card_image(
 NEUTRAL_WPM = 175
 
 
-def _is_neural_voice(voice: str) -> bool:
-    """Edge TTS short names look like en-US-AvaNeural; macOS `say` voices never do."""
-    return bool(re.fullmatch(r"[a-z]{2}-[A-Z]{2}-\w+Neural", voice or ""))
+def _synthesize_title(title: str, dest: Path, *, voice: str = "af_heart", rate: int = 175,
+                      speed: float | None = None, pitch_semitones: float = 0) -> Path:
+    if voice.startswith(("af_", "am_")):
+        from pipeline.kokoro_tts import synthesize
 
-
-def _edge_rate(rate: int) -> str:
-    """Profiles carry nominal words per minute; Edge takes an offset from the voice default."""
-    return f"{round(rate / NEUTRAL_WPM * 100) - 100:+d}%"
-
-
-def _synthesize_title(title: str, dest: Path, *, voice: str = "Samantha", rate: int = 175) -> Path:
-    if _is_neural_voice(voice):
-        import edge_tts
-
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.with_suffix(".txt").write_text(title, encoding="utf-8")
-        with tempfile.NamedTemporaryFile(dir=dest.parent, suffix=".mp3") as audio:
-            try:
-                edge_tts.Communicate(
-                    title, voice=voice, rate=_edge_rate(rate),
-                    connect_timeout=5, receive_timeout=30,
-                ).save_sync(audio.name)
-            except Exception as error:
-                raise RuntimeError(
-                    f"Neural narration ({voice}) failed. Check internet access and retry the preview. "
-                    "Edge TTS may be temporarily unavailable. No fallback voice was used."
-                ) from error
-            if Path(audio.name).stat().st_size == 0:
-                raise RuntimeError(f"Neural narration ({voice}) returned empty audio. "
-                                   "Retry the preview; no fallback voice was used.")
-            run_cmd([ffmpeg_bin(), "-y", "-i", audio.name, "-c:a", "pcm_s16be", str(dest)])
-        return dest
+        return synthesize(title, dest, voice=voice, speed=speed if speed is not None else rate / NEUTRAL_WPM,
+                          pitch_semitones=pitch_semitones, ffmpeg=ffmpeg_bin())
+    if voice.endswith("Neural"):
+        raise RuntimeError("This draft uses a retired Edge TTS voice. Regenerate the storyboard for local Kokoro, "
+                           "then preview and approve again. No fallback voice was used.")
     executable = shutil.which("say")
     if executable is None:
         raise RuntimeError("Card narration requires macOS speech synthesis (say) and the selected system voice.")
@@ -338,10 +316,21 @@ def narration_audio(text: str, dest: Path, profile: dict, cache: Path | None = N
                     approved_assets: dict | None = None) -> dict:
     import json
 
-    key = data_hash({"version": 1, "text": text, "voice": profile["voice"], "rate": profile["rate"]})
+    settings = {"voice": profile["voice"], "rate": profile["rate"]}
+    identity = {}
+    if profile["voice"].startswith(("af_", "am_")):
+        from pipeline.kokoro_tts import cache_identity
+
+        settings.update(speed=profile.get("speed", profile["rate"] / NEUTRAL_WPM),
+                        pitch_semitones=profile.get("pitch_semitones", 0))
+        identity = cache_identity()
+    key = data_hash({"version": 2 if identity else 1, "text": text, **settings, **identity})
+    metadata = {**identity, **settings} if identity else {}
     if cache is None:
-        _synthesize_title(text, dest, voice=profile["voice"], rate=profile["rate"])
-        return {"cache_key": key, "sha256": file_hash(dest)}
+        if approved_assets is not None:
+            raise ValueError("Approved narration requires its cache. Preview and approve again.")
+        _synthesize_title(text, dest, **settings)
+        return {"cache_key": key, "sha256": file_hash(dest), **metadata}
     cache.mkdir(parents=True, exist_ok=True)
     audio, manifest = cache / f"{key}.aiff", cache / f"{key}.json"
     valid = False
@@ -356,7 +345,7 @@ def narration_audio(text: str, dest: Path, profile: dict, cache: Path | None = N
     elif not valid:
         with tempfile.TemporaryDirectory(dir=cache) as temporary:
             pending = Path(temporary) / "speech.aiff"
-            _synthesize_title(text, pending, voice=profile["voice"], rate=profile["rate"])
+            _synthesize_title(text, pending, **settings)
             if media_duration(pending) <= 0:
                 raise ValueError("Narration has no measurable duration.")
             pending.replace(audio)
@@ -364,7 +353,7 @@ def narration_audio(text: str, dest: Path, profile: dict, cache: Path | None = N
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(audio, dest)
     dest.with_suffix(".txt").write_text(text, encoding="utf-8")
-    return {"cache_key": key, "sha256": file_hash(dest)}
+    return {"cache_key": key, "sha256": file_hash(dest), **metadata}
 
 
 def _card_video(png: Path, dest: Path, width: int, height: int, seconds: float, fps: int = 30,

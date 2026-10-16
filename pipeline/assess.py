@@ -28,7 +28,7 @@ GATES = (
     "human_final_review",
 )
 ARTIFACTS = ("compilation.mp4", "captions.srt", "post.txt", "selection.json")
-OBJECTIVE_VERSION = "2.1"
+OBJECTIVE_VERSION = "2.2"
 
 
 def _metric(key, label, passed, value, threshold):
@@ -36,9 +36,11 @@ def _metric(key, label, passed, value, threshold):
             "value": value, "threshold": threshold}
 
 
-def _caption_metrics(text: str, duration: float) -> tuple[list[dict], list]:
+def _caption_metrics(text: str, duration: float, audience: str | None = None) -> tuple[list[dict], list]:
     import srt
 
+    limit = 20 if audience in ("Researcher", "General public") else 17
+    policy = audience if audience in ("Researcher", "General public", "Kids") else "Unknown audience; conservative fallback"
     try:
         cues = list(srt.parse(text))
     except (srt.SRTParseError, ValueError) as exc:
@@ -60,11 +62,12 @@ def _caption_metrics(text: str, duration: float) -> tuple[list[dict], list]:
                           {"invalid_cues": invalid}, "Positive, ordered cues within video; overlap tolerance 0.05s"))
     fastest = max(speeds, default=(0.0, 0.0, ""))
     maximum = fastest[0]
-    metrics.append(_metric("caption_speed", "Sidecar reading speed", maximum <= 20,
+    metrics.append(_metric("caption_speed", "Sidecar reading speed", maximum <= limit,
                           {"max_characters_per_second": round(maximum, 2),
-                           "cues_above_limit": sum(speed[0] > 20 for speed in speeds),
+                           "limit_characters_per_second": limit, "audience_policy": policy,
+                           "cues_above_limit": sum(speed[0] > limit for speed in speeds),
                            "fastest_cue_start_seconds": round(fastest[1], 2), "fastest_cue_text": fastest[2]},
-                          "Maximum 20 characters/second"))
+                          f"Maximum {limit} characters/second ({policy}; English caption policy)"))
     return metrics, cues
 
 
@@ -213,7 +216,8 @@ def measure_export(export_dir: Path) -> dict:
         else:
             metrics.append({"id": "aspect_ratio", "label": "Output aspect ratio", "status": "not_applicable" if visual else "unavailable",
                             "value": aspect, "threshold": "Explicit target aspect ratio required"})
-        caption_metrics, cues = _caption_metrics((export_dir / "captions.srt").read_text(encoding="utf-8-sig"), duration)
+        caption_metrics, cues = _caption_metrics((export_dir / "captions.srt").read_text(encoding="utf-8-sig"), duration,
+                            (selection.get("selection_context") or {}).get("target_audience"))
         metrics.extend(caption_metrics)
         timeline_metrics = _timeline_metrics(selection, duration)
         metrics.extend(timeline_metrics)
@@ -292,15 +296,16 @@ _STATUS_BANNER = {"failed": ("fail", "{fail} OF {total} CHECKS FAILED"),
 # check id -> (what it checks in plain words, what to do when it does not pass)
 _GUIDE = {
     "metadata": ("The export's information file can be read.", "Export again; selection.json is missing or damaged."),
-    "media_provenance": ("Every image, B-roll and voice file is exactly the one that was approved.",
+    "media_provenance": ("Every recorded media and voice file is exactly the one that was approved.",
                          "Export again; a media file changed or is missing."),
     "streams": ("The video has both picture and sound.", "Export again; the file lacks a picture or audio track."),
     "duration": ("The video length is inside the target range.", "Pick different clips or shorter cards, then export again."),
     "aspect_ratio": ("The picture shape matches the chosen format.", "Export again with the intended aspect ratio."),
     "caption_parse": ("The caption file (SRT) is valid and not empty.", "Export again; the caption file is unreadable."),
     "caption_timing": ("Captions appear in order and stay inside the video.", "Export again; caption timing is inconsistent."),
-    "caption_speed": ("Captions stay on screen long enough to read.",
-                      "The speaker talks fast in that passage. Choose a different clip, or treat it as a warning."),
+    "caption_speed": ("Caption text fits the audience-specific English reading-speed ceiling; readability still needs human review.",
+                      "Review the flagged passage. Adjust cue grouping or timing without losing speech sync, or choose a slower clip. "
+                      "Do not remove meaning or raise the limit just to pass."),
     "timeline": ("The export notes match the clips and the video length.", "Export again; the timeline notes disagree with the video."),
     "narration_schedule": ("Each narrated card has the right text, voice and enough time.", "Regenerate the storyboard and export again."),
     "narration_captions": ("Narration captions line up with the recorded voice.", "Regenerate the storyboard and export again."),
@@ -337,9 +342,9 @@ def _friendly_value(metric: dict) -> str:
         if key == "streams":
             return "Picture and sound present" if value["video"] and value["audio"] else f"Picture: {value['video']}; sound: {value['audio']}"
         if key == "caption_speed":
-            text = (f"Fastest caption: {value['max_characters_per_second']:.0f} characters/second; "
+            text = (f"Fastest caption: {value['max_characters_per_second']:.2f} characters/second; "
                     f"{value['cues_above_limit']} caption(s) too fast")
-            if value.get("fastest_cue_text") and value["max_characters_per_second"] > 20:
+            if value.get("fastest_cue_text") and value["cues_above_limit"] > 0:
                 text += f'. Worst: "{value["fastest_cue_text"]}" at {value["fastest_cue_start_seconds"]:.1f} s'
             return text
         if key == "narration_audio" and isinstance(value, list):

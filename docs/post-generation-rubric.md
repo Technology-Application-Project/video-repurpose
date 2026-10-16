@@ -2,7 +2,7 @@
 
 ## Automatic Technical Checks
 
-Metrics version 2.0 is the default final assessment. Selecting an export in
+Metrics version 2.2 is the default final assessment. Selecting an export in
 **5. Assessment** runs the checks automatically, without a reviewer or subjective
 ratings. The report shows measured values, explicit thresholds and pass/fail counts.
 Unavailable measurements are not treated as passes. A failed check makes the
@@ -17,7 +17,7 @@ technical result failed; otherwise unavailable checks make it incomplete.
 | Aspect ratio | Explicit target within 0.02 ratio units; Original is not applicable |
 | SRT parsing | Valid, nonempty sidecar |
 | Cue timing | Positive, ordered, nonempty cues within video; 0.05s overlap and 0.1s end tolerance |
-| Reading speed | At most 20 characters/second, including spaces after whitespace normalization |
+| Reading speed | English captions: at most 17 characters/second for Kids (8-12); 20 for Researcher and General public; unknown audience uses a labelled conservative 17-CPS fallback |
 | Timeline consistency | Clip IDs/order match selection; contiguous within 0.1s; clip lengths within 0.15s; total within 0.2s |
 | Narration metadata | Enabled cards have expected text, saved voice/rate and sufficient hold time |
 | Narration sidecar | Text matches; start within 0.05s and end within 0.1s of recorded narration |
@@ -35,7 +35,7 @@ checks pass. The existing pre-export storyboard approval remains unchanged.
 
 For Researcher, General public and Kids (ages 8-12), assess writing and visual
 treatment. Review every automatic trim/removal against surrounding source context.
-Generated images/B-roll must be marked as illustrations, never invented experimental
+Generated images (and B-roll in older exports) must be marked as illustrations, never invented experimental
 evidence, data, people or events. Overlays must not conceal important source diagrams.
 Listen to the final mix: stem audibility does not prove speech is intelligible under
 music. Check for unwanted vocals, distracting effects and redistribution permissions.
@@ -50,6 +50,41 @@ reject the report. No exports or existing ZIPs are overwritten.
 python -m pipeline.assess exports/RUN_ID/EXPORT_ID --automatic
 python -m pipeline.assess exports/RUN_ID/EXPORT_ID --automatic --force
 ```
+
+## Caption Reading-Speed Policy
+
+The limits are project delivery ceilings, not ideal reading speeds or universal
+accessibility standards. They follow the adult (20 CPS) and children's (17 CPS)
+limits in the [Netflix English (USA) Timed Text Style Guide, sections I.14 and II.17](https://partnerhelp.netflixstudios.com/hc/en-us/articles/217350977-English-USA-Timed-Text-Style-Guide).
+Audience comes from the export's `selection_context.target_audience`, never the
+current UI. Missing or unrecognized audiences remain unknown and use 17 CPS as a
+conservative project fallback, not as an inferred Kids classification. These limits
+apply to English; other languages require their own reviewed policy.
+
+For each positive-duration SRT cue, CPS is the number of characters divided by
+display duration in seconds. Whitespace runs, including line breaks, become one
+space; leading and trailing whitespace is removed. Spaces and punctuation count.
+The maximum and number of cues exceeding the audience limit are reported. A cue
+exactly at the limit passes; decisions use the unrounded rate, while the report
+displays two decimal places. This is a per-cue ceiling, not a whole-video average.
+All sidecar cues are checked, including source speech and card narration.
+
+The [BBC Subtitle Guidelines, sections 4 and 20](https://www.bbc.co.uk/accessibility/forproducts/guides/subtitles/)
+recommend 160-180 words/minute generally, with editorial adjustments for timing,
+language difficulty, visuals and children's age. WPM is a different measure and
+is not converted into CPS using an assumed average word length. Children may need
+more time than the 17-CPS ceiling permits, especially with unfamiliar scientific
+terms or diagrams. Passing this check does not establish comprehension.
+
+For failures, inspect the passage in context. Adjust cue grouping or extend display
+time only where speech synchronization, pauses and shot boundaries permit. Otherwise
+select slower source material. Any condensation needs editorial review and must
+preserve meaning, technical terms and qualifications; never raise the threshold or
+delete important words merely to pass. Review the final burned-in captions on the
+target display for accuracy, natural segmentation, contrast and unobstructed visuals.
+
+Version 2.2 replaces the former universal 20-CPS check. Its changed metric version
+invalidates cached assessments without rewriting old reports or export artifacts.
 
 ## Legacy Editorial Rubric
 

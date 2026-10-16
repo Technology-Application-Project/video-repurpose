@@ -4,7 +4,6 @@ sentence-transformers
 whisperx
 pillow
 srt>=3.5.3
-edge-tts>=7.2.8
 google-genai>=2.29,<3
 python-dotenv>=1.0,<2
 portkey-ai>=2.3.4,<3

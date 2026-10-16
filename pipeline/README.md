@@ -6,18 +6,62 @@ The active Gradio workflow uses Researcher, General public and Kids (ages 8-12),
 with a measured 30-60 second final duration (60-90 for earlier drafts). The historical walkthrough below
 describes the original prototype; current behavior is:
 
-`transcribe -> local nominate/review -> automatic clip selection (or human keep) -> approve cloud estimate -> fit -> Gemini storyboard -> measured narration -> generated media -> preview -> human approve -> export -> assess`
+`transcribe -> local nominate/review -> automatic clip selection (or human keep) -> fit -> Gemini storyboard -> measured narration -> generated media -> preview -> human approve -> export -> assess`
 
 - `storyboard.py`: shared audience profiles, duration policy and evidence-validated text.
 - `fit.py`: bounded complete-sentence fitting and local review of changed ranges.
-- `cloud.py`: Google SDK, cost consent, capped request ledger and video-job resume.
-- `media.py`: verified assets, narration measurement, optional licensed SFX and ducked mix.
+- `cloud.py`: Google/Portkey adapters, current configuration checks and capped text/image/music request ledger; no video generation or cost-consent gate.
+- `media.py`: verified card artwork, narration measurement, optional licensed SFX and ducked audio mix with unchanged video frames.
 - `assemble.py`: audience styling, source footage and captions on the measured timeline.
 - `export.py`: approved asset reuse, provenance inventory and atomic export/ZIP.
 - `assess.py`: recorded duration policy, media hashes and separate narration-stem checks.
 
+Generation creates a fresh `cloud_batch` scoped to the current selection and aspect
+ratio. Cost estimates remain visible, but no checkbox or separate approval is required.
+Each explicit regeneration creates a new batch; request limits, hash-verified caching,
+credential checks and human preview approval before export remain in place.
+
 See the root README for setup, licensing and tests. Old exports remain unchanged;
-old working drafts require audience selection and regeneration.
+old working drafts require audience selection and regeneration. B-roll generation and the
+inset overlay have been removed. Drafts containing B-roll require regeneration and fresh
+preview approval; old exports remain readable and are not rewritten.
+
+### Local Kokoro Narration
+
+Current audience profile version 4.0 uses local `hexgrad/Kokoro-82M`:
+Researcher `am_michael` at 0.95x, General public `af_heart` at 1.0x,
+and Kids `af_sky` at 0.98x with a +2-semitone pitch/formant effect.
+The Kids preset is a synthetic childlike effect, not a dedicated child voice.
+The `rate` field is nominal metadata; actual audio duration controls card timing.
+
+Keep Kokoro in its own Python 3.12 environment, separate from the app:
+
+```bash
+uv venv --python 3.12 --seed work/kokoro-runtime/.venv
+uv pip install --python work/kokoro-runtime/.venv/bin/python -r requirements-kokoro.txt
+work/kokoro-runtime/.venv/bin/python pipeline/kokoro_tts.py --prepare
+```
+
+Run these commands from the project root. `--prepare` downloads the English
+language model, Kokoro weights and all three voice packs once. No speech API key
+is required. Subsequent synthesis sets Hugging Face and Transformers offline mode;
+missing dependencies or models fail explicitly, without an Edge or macOS fallback.
+The app sends narration to the isolated worker on stdin, not to a cloud TTS service.
+Each uncached request loads the CPU model; approved and unchanged audio is reused.
+
+Optional `KOKORO_PYTHON` and `KOKORO_MODEL_CACHE` environment variables override the
+worker interpreter and model-cache location. The defaults are
+`work/kokoro-runtime/.venv/bin/python` and `work/kokoro-runtime/model-cache`.
+FFmpeg is required. Restart the app after changing the runtime or provider settings.
+
+The worker preserves wording, cleans whitespace and adds terminal punctuation;
+it writes 24 kHz mono AIFF, targeting -19 LUFS while keeping true peaks below
+-1 dBTP. Peak safety takes precedence when both targets cannot be met. Original
+lecture audio and the existing video mix are unchanged. Narration cache identity
+includes provider, model, package/render version, voice, speed and pitch settings;
+exports record these settings. A changed profile requires a new preview and human
+approval. Old exported files remain untouched. Retired explicit macOS profiles are
+still supported, but a saved Edge voice must be regenerated with a current profile.
 
 ### Intro and Bridge Renderer 2.0
 

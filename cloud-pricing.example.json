@@ -7,13 +7,11 @@
   "models": {
     "text": "",
     "image": "",
-    "video": "",
     "music": ""
   },
   "usd_per_request": {
     "text": null,
     "image": null,
-    "video": null,
     "music": null
   }
 }

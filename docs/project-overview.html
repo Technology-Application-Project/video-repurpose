@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Technology stack, features and workflow of the Educational Short Clip Demo.">
+<meta name="description" content="Current architecture of the Educational Short Clip Demo: audience-aware selection, cloud storyboards, local Kokoro narration, reviewed exports and automatic assessment.">
 <title>Educational Short Clip Demo | Project Overview</title>
 <style>
  :root{--ink:#202d28;--muted:#556760;--green:#145f4c;--gold:#d7ac40;--line:#d5dfda}
@@ -25,39 +25,42 @@
 </head>
 <body>
 <header><div class="wrap">
- <div class="eyebrow">Project brief / Local AI + video / 02 October 2026</div>
+ <div class="eyebrow">Project brief / Hybrid AI + local media / 16 October 2026</div>
  <h1>Educational Short Clip Demo</h1>
- <p class="lede">Turn a lecture into an audience-focused short compilation, with source-grounded clip suggestions, a narrated opening, captions and evidence-backed human review.</p>
- <nav aria-label="Sections"><a href="#workflow">Workflow</a><a href="#stack">Tech stack</a><a href="#features">Features</a><a href="#outputs">Outputs</a><a href="#review">Review &amp; roadmap</a><a href="#run">Run locally</a></nav>
+ <p class="lede">Turn a lecture into a 30-60 second compilation for researchers, the general public or children, with automatically selected excerpts, local narration, captions and evidence-backed human review.</p>
+ <nav aria-label="Sections"><a href="#workflow">Workflow</a><a href="#stack">Tech stack</a><a href="#media">Image &amp; video</a><a href="#features">Features</a><a href="#outputs">Outputs</a><a href="#review">Assessment &amp; limits</a><a href="#run">Run locally</a></nav>
 </div></header>
 <main class="wrap">
- <div class="facts" aria-label="Project at a glance"><div><strong>1-5 clips</strong><span>Human-confirmed source excerpts</span></div><div><strong>45-120 sec</strong><span>Generated compilation budget</span></div><div><strong>5 audiences</strong><span>General to advanced learners</span></div><div><strong>Local-first</strong><span>Python app + local model service</span></div></div>
+ <div class="facts" aria-label="Project at a glance"><div><strong>Up to 3 clips</strong><span>Automatic selection; manual path allows 1-5</span></div><div><strong>30-60 sec</strong><span>Measured compilation duration</span></div><div><strong>3 audiences</strong><span>Researcher, General public, Kids (8-12)</span></div><div><strong>Local speech</strong><span>Kokoro; cloud text uses capped batches</span></div></div>
  <section id="workflow">
   <h2><span>01</span>From lecture to reviewed short</h2>
-  <p class="muted">Gradio coordinates the Python pipeline. AI proposes content; the application validates structure and timing; humans select clips and approve the result.</p>
+  <p class="muted">Gradio coordinates local transcription, nomination and automatic clip selection. Generation starts directly with the configured provider and request limits, without a separate cost-approval step. A human still reviews and approves the storyboard preview before export. Manual clip review remains available; automatic selection is not human approval.</p>
   <figure><div class="diagram" tabindex="0" role="region" aria-label="Workflow diagram, horizontally scrollable on small screens">
    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 350" role="img" aria-labelledby="diagram-title diagram-desc">
-    <title id="diagram-title">Lecture processing and review workflow</title><desc id="diagram-desc">Upload, transcribe, nominate and rank, confirm clips, generate storyboard and preview, approve storyboard, export, and assess the final compilation.</desc>
+    <title id="diagram-title">Lecture processing and review workflow</title><desc id="diagram-desc">Upload, transcribe, nominate and automatically select clips, automatically configure a cloud batch, generate a storyboard and local narrated preview, approve the preview, export, and assess the final compilation.</desc>
     <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#728c81"/></marker></defs>
     <g fill="none" stroke="#728c81" stroke-width="2" marker-end="url(#arrow)"><path d="M234 93H282"/><path d="M489 93H537"/><path d="M744 93H792"/><path d="M900 144V180H132V209"/><path d="M234 263H282"/><path d="M489 263H537"/><path d="M744 263H792"/></g>
     <g font-family="Avenir Next,Segoe UI,sans-serif">
-     <g fill="#eef5f1" stroke="#b8cec3"><rect x="30" y="42" width="204" height="102" rx="6"/><rect x="285" y="42" width="204" height="102" rx="6"/><rect x="540" y="42" width="204" height="102" rx="6"/><rect x="30" y="212" width="204" height="102" rx="6"/><rect x="540" y="212" width="204" height="102" rx="6"/></g>
-     <g fill="#fcf5df" stroke="#d8bd69"><rect x="795" y="42" width="214" height="102" rx="6"/><rect x="285" y="212" width="204" height="102" rx="6"/><rect x="795" y="212" width="214" height="102" rx="6"/></g>
-     <g fill="#145f4c" font-size="12" font-weight="700"><text x="48" y="68">INPUT</text><text x="303" y="68">WHISPERX</text><text x="558" y="68">OLLAMA</text><text x="813" y="68">HUMAN SELECTION</text><text x="48" y="238">AI + MEDIA PIPELINE</text><text x="303" y="238">HUMAN CHECK</text><text x="558" y="238">FFMPEG + FILES</text><text x="813" y="238">HUMAN + RUBRIC</text></g>
-     <g fill="#202d28" font-size="17" font-weight="600"><text x="48" y="96">Upload lecture</text><text x="303" y="96">Transcribe</text><text x="558" y="96">Nominate + rank</text><text x="813" y="96">Keep + confirm</text><text x="48" y="266">Storyboard + preview</text><text x="303" y="266">Approve storyboard</text><text x="558" y="266">Export compilation</text><text x="813" y="266">Assess + final review</text></g>
-     <g fill="#556760" font-size="12"><text x="48" y="120">Video, audience, duration</text><text x="303" y="120">Speech + timestamps</text><text x="558" y="120">Evidence + context checks</text><text x="813" y="120">1 to 5 complete excerpts</text><text x="48" y="290">Title voice, joins, ending</text><text x="303" y="290">Named preview review</text><text x="558" y="290">MP4, SRT, text, metadata</text><text x="813" y="290">Evidence + publication gates</text></g>
+    <g fill="#eef5f1" stroke="#b8cec3"><rect x="30" y="42" width="204" height="102" rx="6"/><rect x="285" y="42" width="204" height="102" rx="6"/><rect x="540" y="42" width="204" height="102" rx="6"/><rect x="795" y="42" width="214" height="102" rx="6"/><rect x="30" y="212" width="204" height="102" rx="6"/><rect x="540" y="212" width="204" height="102" rx="6"/></g>
+    <g fill="#fcf5df" stroke="#d8bd69"><rect x="285" y="212" width="204" height="102" rx="6"/><rect x="795" y="212" width="214" height="102" rx="6"/></g>
+      <g fill="#145f4c" font-size="12" font-weight="700"><text x="48" y="68">INPUT</text><text x="303" y="68">WHISPERX</text><text x="558" y="68">OLLAMA + SELECTION</text><text x="813" y="68">AUTOMATIC BATCH</text><text x="48" y="238">CLOUD TEXT + KOKORO</text><text x="303" y="238">HUMAN CHECK</text><text x="558" y="238">FFMPEG + FILES</text><text x="813" y="238">CHECKS + REVIEW</text></g>
+      <g fill="#202d28" font-size="17" font-weight="600"><text x="48" y="96">Upload lecture</text><text x="303" y="96">Transcribe</text><text x="558" y="96">Nominate + select</text><text x="813" y="96">Configure batch</text><text x="48" y="266">Storyboard + preview</text><text x="303" y="266">Approve storyboard</text><text x="558" y="266">Export compilation</text><text x="813" y="266">Assess + final review</text></g>
+    <g fill="#556760" font-size="12"><text x="48" y="120">Video, audience, duration</text><text x="303" y="120">Speech + timestamps</text><text x="558" y="120">Rank, filter, keep up to 3</text><text x="813" y="120">Provider, estimate, batch caps</text><text x="48" y="290">Fit, narrate, illustrate, mix</text><text x="303" y="290">Named preview review</text><text x="558" y="290">MP4, SRT, text, assets</text><text x="813" y="290">Metrics are not certification</text></g>
     </g>
    </svg>
-  </div><figcaption>Green stages process content. Gold stages require human decisions. Export creates a local artifact; it does not publish it.</figcaption></figure>
+  </div><figcaption>Green stages process content. Gold stages involve human review. The final stage combines automatic technical checks with separate human judgment. Export creates a local artifact; it does not publish it.</figcaption></figure>
   <details><summary>Mermaid diagram source</summary><pre><code>flowchart LR
   A[Local video + audience] --> B[WhisperX transcription]
   B --> C[Ollama nomination + editorial ranking]
-  C --> D[Human confirms 1-5 clips]
-  D --> E[Automatic storyboard + narrated preview]
-  E --> F[Human storyboard approval]
-  F --> G[FFmpeg export + artifact bundle]
-  G --> H[Evidence-backed assessment]
-  H --> I[Human final review]
+  C --> D[Automatic selection or manual keep]
+  D --> Q[Automatic scoped batch + request caps]
+  Q --> E[Fit excerpts + Gemini storyboard via Portkey]
+  E --> N[Local Kokoro narration + measured duration]
+  N --> M[Illustrations + library music + FFmpeg preview]
+  M --> F[Human storyboard approval]
+  F --> G[FFmpeg export + hashed artifact bundle]
+  G --> H[Automatic technical assessment]
+  H --> I[Separate evidence-backed human final review]
   I --> J{All publication gates pass?}
   J -->|Yes| K[Locally marked approved]
   J -->|No| L[Blocked: revise or finish review]</code></pre></details>
@@ -65,51 +68,75 @@
  <section id="stack">
   <h2><span>02</span>Technology stack</h2>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Technology stack table"><table><thead><tr><th scope="col">Layer</th><th scope="col">Technology</th><th scope="col">Responsibility</th></tr></thead><tbody>
-   <tr><td>Application</td><td>Python 3.11+ / Gradio</td><td>Five-tab UI, queued callbacks, session state and workflow validation.</td></tr>
+  <tr><td>Application</td><td>Python / Gradio</td><td>Five-tab UI, queued callbacks, session state and workflow validation. The current app runtime is Python 3.13; Kokoro uses a separate Python 3.12 environment.</td></tr>
    <tr><td>Speech recognition</td><td>WhisperX / PyTorch</td><td>Local transcription with the small ASR model and word alignment when available; segment timing is the fallback.</td></tr>
-   <tr><td>Language intelligence</td><td>Ollama / Qwen2.5 default</td><td>Source-grounded concepts, clip nomination, editorial estimates, metadata and structured storyboards.</td></tr>
+  <tr><td>Local language intelligence</td><td>Ollama / Qwen2.5 default</td><td>Source-grounded concepts, clip nomination and editorial estimates. Deterministic rules rank, filter overlaps and choose a duration-bounded subset.</td></tr>
+  <tr><td>Creative text</td><td>Gemini via Portkey</td><td>Evidence-linked opening, bridges, synthesis and CTA from fitted excerpts. Generation sends prompts and selected excerpts to the configured gateway without a separate cost confirmation; each batch records its configuration and request limits.</td></tr>
    <tr><td>Current ranking</td><td>Python editorial rules</td><td>Audience fit 40%, completeness 35%, educational value 25%; context gates and overlap filtering.</td></tr>
    <tr><td>Legacy similarity</td><td>sentence-transformers</td><td>all-MiniLM-L6-v2 embeddings for older callers without an audience; not the main audience-aware path.</td></tr>
    <tr><td>Video and audio</td><td>FFmpeg / ffprobe</td><td>Cutting, normalization, concatenation, audio encoding, caption burn-in and measured duration checks.</td></tr>
-   <tr><td>Graphics</td><td>Pillow</td><td>Pixel-fitted title cards, transition graphics, ending screens and caption images.</td></tr>
-   <tr><td>Intro voice</td><td>macOS say / Samantha</td><td>Offline title narration at 175 words/minute. The intro extends when the voice needs more time.</td></tr>
+  <tr><td>Card graphics</td><td>Pillow / local FFmpeg</td><td>Current local-illustration mode turns cloud-generated, constrained JSON into conceptual artwork. Cards use pixel-fitted text and source-frame bridges. No B-roll or generative-video requests are made.</td></tr>
+  <tr><td>Card narration</td><td>Kokoro 0.9.4 / Kokoro-82M</td><td>Local CPU speech in an isolated Python 3.12 worker. Intro, divider and ending narration runs offline after model setup; 24 kHz mono AIFF, loudness finishing and measured card durations.</td></tr>
+  <tr><td>Music</td><td>Bundled CC0 library</td><td>Deterministic audience-aware track selection, recorded attribution and a ducked mix. The active library path makes no music-generation API call.</td></tr>
    <tr><td>Storage and audit</td><td>Local files / JSON / SHA-256</td><td>Versioned exports, selection provenance and artifact-bound assessments; no database required.</td></tr>
    <tr><td>Verification</td><td>unittest / FFmpeg integration tests</td><td>Selection, approval, real rendering, narration, timing, export bundles and assessment validation.</td></tr>
   </tbody></table></div>
-  <p class="muted">Local-first does not mean a fully offline installation: packages, ASR/alignment weights and Ollama models may need downloading. Narrated intros currently depend on macOS and the installed Samantha voice.</p>
+  <p class="muted">This is a hybrid pipeline, not a fully offline application. Packages and model weights require initial downloads; creative text and illustration descriptions still use paid cloud calls. Kokoro speech and media rendering are local. Optional Google-direct image and music adapters remain, but video generation has been removed.</p>
+ </section>
+ <section id="media">
+  <h2><span>03</span>Image generation and video assembly</h2>
+  <p>The active configuration is <code>media_provider: local-illustration</code> with Portkey text generation. The model describes a scene; local code draws card artwork. The final video combines original lecture excerpts with narrated cards, captions and music. B-roll generation and the inset overlay have been removed to keep attention on the educational content.</p>
+  <div class="columns">
+   <div><h3>Images: evidence to PNG</h3><ol><li>Build separate opening and ending briefs from the storyboard's cited excerpts and audience visual style.</li><li>Ask the configured Gemini text model through Portkey for constrained scene JSON: colors, coordinates, opacity and layers of rectangles, ellipses, polygons and lines. The model does not supply executable code or markup.</li><li>Validate colors and numbers, clamp coordinates, discard invalid shapes and require at least six usable shapes. Reject nearly blank results.</li><li>Render with Pillow at double resolution, then downsample to <strong>1280 &times; 720</strong> or <strong>720 &times; 1280</strong>. Save the PNG, source JSON, prompt, model identity and asset hash.</li></ol><p>Text is overlaid by the card renderer, not painted by the model. Prompts request no real people, invented data, charts, results, logos or quotations; human review must still check meaning and suitability.</p></div>
+  <div><h3>Video: assemble the lecture</h3><ol><li>Keep the selected source excerpts and their original speech.</li><li>Add narrated opening and ending cards using the generated artwork. Transition cards normally use a frame from the incoming source clip, with illustration fallback.</li><li>Place captions on the measured timeline without adding a B-roll inset or illustration label over the lecture.</li><li>Duck the music under speech and retain optional licensed sound effects. The audio-mixing step copies the assembled video stream without re-encoding its frames.</li></ol><p>This is video editing and assembly, not generative video. Removing the former four-second overlay does not remove four seconds of footage or change the selected clip order.</p></div>
+  </div>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="Current image generation and video assembly paths"><table><thead><tr><th scope="col">Path</th><th scope="col">Generation mechanism</th><th scope="col">Status and requirements</th></tr></thead><tbody>
+   <tr><td>Local illustrations</td><td>Portkey text call returns scene JSON; Pillow renders two PNGs.</td><td>Active and exercised in the latest end-to-end runs. The text calls are paid even though image rendering is local.</td></tr>
+  <tr><td>Video assembly</td><td>FFmpeg combines lecture excerpts, narrated cards, captions and the audio mix.</td><td>Active. No generated video asset or B-roll request is needed.</td></tr>
+  <tr><td>Google-direct images</td><td>A configured image-capable model returns image bytes through the Google Gen AI SDK.</td><td>Optional adapter, not active in the latest runs. Requires explicit <code>media_provider: google</code>, an accessible image model, credentials, quota and valid pricing configuration.</td></tr>
+  </tbody></table></div>
+  <p class="muted">Ownership: <a href="../pipeline/media.py">media.py</a> builds evidence-linked briefs and mixes audio; <a href="../pipeline/cloud.py">cloud.py</a> handles text/image/music requests, configuration, caching and the ledger; <a href="../pipeline/illustration.py">illustration.py</a> validates scene data and renders local assets; <a href="../pipeline/cards.py">cards.py</a> lays out the narrated cards.</p>
+  <div class="notice"><p><strong>Controls and provenance:</strong> each batch allows at most four text requests, two image requests and one music request only when generated music is selected. Video requests are unsupported. Cached assets are reused and SHA-256 hashes are checked before rendering and export. Old drafts containing B-roll require regeneration and fresh preview approval; existing exports and assessment records are unchanged. Each generation reads current provider settings and creates a new batch; estimates are informational, not a consent gate. Card artwork is labelled conceptual illustration, not source evidence; a 1080p export does not make the 720p artwork native 1080p.</p></div>
  </section>
  <section id="features">
-  <h2><span>03</span>Implemented features</h2>
+  <h2><span>04</span>Implemented features</h2>
   <div class="features">
-   <article><span class="label">Understand</span><h3>Audience-aware selection</h3><p>General audience, beginners, students, professionals and advanced learners. Source concepts guide nomination without requiring a manually written teaching topic.</p></article>
-   <article><span class="label">Inspect</span><h3>Evidence-backed clip review</h3><p>Preview clips, inspect timestamped quotes, edit boundaries and keep 1-5 excerpts. Context-risk candidates and redundant overlaps are filtered.</p></article>
-   <article><span class="label">Compose</span><h3>Automatic storyboard</h3><p>Confirmation generates the opening, joins, synthesis and reflection question, then renders a preview. Claims, timing and text remain editable.</p></article>
-   <article><span class="label">Present</span><h3>Standalone narrated intro</h3><p>A centered title on a full-screen dark green card with a gold accent. A synthetic voice reads only the title before original lecture speech begins.</p></article>
-   <article><span class="label">Package</span><h3>Multi-format captioned video</h3><p>Original, landscape 16:9, portrait 9:16 and square 1:1 formats. Cuts, overlays or dividers connect clips; captions follow the measured timeline.</p></article>
-   <article><span class="label">Govern</span><h3>Revision-aware review</h3><p>Named storyboard approval, non-overwriting exports, weighted final assessment and hash-based stale-review detection. Edits invalidate approval.</p></article>
+  <article><span class="label">Understand</span><h3>Audience-aware selection</h3><p>Researcher, General public and Kids (ages 8-12) have distinct wording, goals and voice presets. Automatic selection keeps up to three ranked, non-rejected excerpts within an estimated duration budget; manual selection allows 1-5.</p></article>
+  <article><span class="label">Inspect</span><h3>Evidence-backed clip review</h3><p>Preview excerpts, inspect timestamped quotes and context risks, and edit boundaries. Complete-sentence fitting and overlap checks protect the selection; changed ranges need fresh editorial review.</p></article>
+  <article><span class="label">Compose</span><h3>Direct storyboard generation</h3><p>Generate an audience-specific hook, bridges connecting adjacent excerpts, synthesis and an actionable CTA without a cost-approval checkbox. Request caps and a ledger constrain each batch. Measured narration must fit the 30-60 second compilation budget.</p></article>
+  <article><span class="label">Present</span><h3>Local audience voices</h3><p>Researcher: Michael at 0.95x. General public: Heart at 1.0x. Kids: Sky at 0.98x with a +2-semitone pitch/formant effect, not a dedicated child voice. Missing local setup fails explicitly, with no silent Edge or system-voice fallback.</p></article>
+  <article><span class="label">Package</span><h3>Focused cards and captions</h3><p>Renderer 2.0 gives intros and bridges whole-phrase reveals, compact text and localized shading. Bridges use the incoming source frame, with an illustration fallback. Generated media targets 16:9 and 9:16; Original and 1:1 currently resolve to 16:9 in this path.</p></article>
+  <article><span class="label">Govern</span><h3>Revision-aware review</h3><p>Named preview approval, timestamped non-overwriting exports and artifact-bound assessments. Narration caches include provider, model, processing version, voice, speed and pitch. Export reuses approved audio; changed profiles, text or renderer settings require fresh review.</p></article>
   </div><div class="notice"><p><strong>Quality boundary:</strong> model estimates and valid citations do not prove truth. Missing assessments remain unassessed rather than receiving invented passing scores.</p></div>
  </section>
  <section id="outputs">
-  <h2><span>04</span>Architecture and deliverables</h2><div class="columns">
-   <div><h3>Modular Python pipeline</h3><p><a href="../app.py">app.py</a> orchestrates the UI. Modules in <a href="../pipeline/README.md">pipeline/</a> own transcription, nomination, editorial review, ranking, storyboard validation, cutting, assembly, export and assessment.</p><p>Intermediate data lives in <code>work/</code>. Final artifacts live in <code>exports/RUN_ID/EXPORT_ID/</code>. Each export is a new version.</p><p class="muted">The source URL is attribution text, not a download input. There is no automatic social publishing or authenticated approval service. Reviewer names are local declarations.</p></div>
-   <div><h3>Export bundle</h3><div class="artifact"><code>compilation.mp4</code><span>Final video, burned-in captions and narrated opening.</span></div><div class="artifact"><code>captions.srt</code><span>Lecture subtitles on the final timeline.</span></div><div class="artifact"><code>post.txt</code><span>Post copy, attribution, selected ranges and reflection.</span></div><div class="artifact"><code>selection.json</code><span>Clips, audience, storyboard, approval and timeline.</span></div><div class="artifact"><code>compilation.zip</code><span>Bundle of the four export artifacts above.</span></div><div class="artifact"><code>assessments/</code><span>Versioned review JSON, assessment JSON and Markdown. The original ZIP stays unchanged.</span></div></div>
+  <h2><span>05</span>Architecture and deliverables</h2><div class="columns">
+  <div><h3>Modular Python pipeline</h3><p><a href="../app.py">app.py</a> orchestrates the UI. Modules in <a href="../pipeline/README.md">pipeline/</a> own transcription, nomination, editorial review, fitting, cloud requests, storyboard validation, narration, media, assembly, export and assessment. <a href="../pipeline/kokoro_tts.py">kokoro_tts.py</a> isolates speech dependencies from the app runtime.</p><p>Intermediate data and cached narration live in <code>work/</code>. Final artifacts use <code>exports/RUN_ID/YYYYMMDD-HHMMSS_audience_aspect_id/</code>; <code>exports/latest</code> points to the newest export when supported. Older exports are never rewritten.</p><p class="muted">The source URL is attribution text, not a download input. There is no automatic social publishing or authenticated approval service. Reviewer names are local declarations. Old audience profiles require regeneration; existing exported files retain their original provenance.</p></div>
+  <div><h3>Export bundle</h3><div class="artifact"><code>compilation.mp4</code><span>Final video, burned-in lecture captions, narrated cards and music mix.</span></div><div class="artifact"><code>captions.srt</code><span>Lecture and card-narration subtitles on the measured timeline.</span></div><div class="artifact"><code>post.txt</code><span>Post copy, source attribution, selected ranges, CTA and media credits.</span></div><div class="artifact"><code>selection.json</code><span>Selection mode, audience, storyboard, approval, voice settings, timeline and asset hashes.</span></div><div class="artifact"><code>assets/</code><span>Referenced media and narration assets preserved for provenance and assessment.</span></div><div class="artifact"><code>compilation-EXPORT_ID.zip</code><span>Versioned bundle of the video, sidecars, metadata and recorded assets.</span></div><div class="artifact"><code>assessments/</code><span>Artifact-bound automatic reports and separate human review records. The original ZIP stays unchanged.</span></div></div>
   </div>
  </section>
  <section id="review">
-  <h2><span>05</span>Assessment: current vs. proposed</h2><div class="columns">
-   <div><span class="label">Implemented today</span><h3>Human review, automatic calculation</h3><p>The scorer validates evidence and calculates ratings. It does not independently watch, listen to or assess the video.</p><ul><li>Source fidelity: <strong>25%</strong></li><li>Audience fit and learning value: <strong>25%</strong></li><li>Standalone coherence: <strong>20%</strong></li><li>Captions: <strong>15%</strong></li><li>Audio and visuals: <strong>15%</strong></li></ul><p>Every dimension needs evidence and at least 3/4. Claims, context, caption readability and human final review must all pass. Incomplete reviews stay blocked.</p></div>
-   <div><span class="label">Proposed / not implemented</span><h3>Auto-assessment, one final human approval</h3><p>Collect technical measurements and AI editorial estimates automatically, then present an evidence-backed report for final review.</p><ul><li>Decoding, timing, caption and audio measurements.</li><li>Editorial comparison with surrounding source context.</li><li>Separate AI assessment and human approval records.</li><li>One final approval after watching and listening; unresolved checks still block approval.</li></ul><p><strong>Current behavior is different:</strong> storyboard approval and final assessment remain separate. Text-only AI cannot certify visual readability or listening quality.</p></div>
+  <h2><span>06</span>Assessment and current limits</h2><div class="columns">
+  <div><span class="label">Implemented today</span><h3>Automatic technical checks</h3><p>Objective assessment measures the exported artifact and reports failures first, with values, limits and suggested fixes. Matching artifact hashes and metric versions allow report reuse; changed files or policies require reassessment.</p><ul><li>Decoding, streams, resolution and measured duration.</li><li>Caption timing, coverage and English reading speed: at most 17 characters/second for Kids, 20 for Researcher and General public; unknown audiences use a labelled conservative 17-CPS fallback. See the <a href="post-generation-rubric.md#caption-reading-speed-policy">sourced caption policy</a>.</li><li>Audio measurements, including separate narration-stem checks.</li><li>Recorded assets and narration provenance.</li></ul><p>Missing evidence is unavailable, not a passing score. The automatic report explicitly leaves publication suitability <strong>not assessed</strong>; it does not certify factual accuracy, caption comprehension or subjective listening quality.</p></div>
+   <div><span class="label">Separate human judgment</span><h3>Evidence-backed final review</h3><p>Named storyboard approval remains a pre-export gate. The separate human rubric records evidence, weighted ratings and publication gates after export.</p><ul><li>Source fidelity: <strong>25%</strong></li><li>Audience fit and learning value: <strong>25%</strong></li><li>Standalone coherence: <strong>20%</strong></li><li>Captions: <strong>15%</strong></li><li>Audio and visuals: <strong>15%</strong></li></ul><p>Every dimension needs evidence and at least 3/4. Claims, context, caption readability and human final review must all pass. Automatic clip selection and automated test exports are not human approval.</p></div>
   </div>
+  <div class="notice"><p><strong>Validation snapshot, 15 October 2026:</strong> fresh end-to-end runs completed for all three audiences, producing 1080p landscape videos of 45.6, 42.8 and 37.6 seconds. Each passed 14 technical checks and failed caption reading speed on original lecture excerpts, not Kokoro narration. Seven older renderer-test assertions also remain failing in the current regression suite. Human listening, factual review and transition pacing still need review; technical completion is not publication readiness.</p></div>
  </section>
- <section id="run"><h2><span>06</span>Run and verify</h2><div class="columns">
-  <div><h3>Local application</h3><p>Requires Python, FFmpeg/ffprobe, a running Ollama service and its model; macOS Samantha for narrated openings.</p><pre><code>pip install -r requirements.txt
+ <section id="run"><h2><span>07</span>Run and verify</h2><div class="columns">
+  <div><h3>Application and speech runtime</h3><p>Requires Python, FFmpeg/ffprobe, Ollama, and <code>uv</code> for the isolated Kokoro environment. Run from the project root:</p><pre><code>pip install -r requirements.txt
 ollama pull qwen2.5
-python app.py</code></pre></div>
+
+uv venv --python 3.12 --seed work/kokoro-runtime/.venv
+uv pip install --python work/kokoro-runtime/.venv/bin/python \
+  -r requirements-kokoro.txt
+work/kokoro-runtime/.venv/bin/python pipeline/kokoro_tts.py --prepare
+
+python app.py</code></pre><p>The preparation step downloads the English model, Kokoro weights and voice packs once. Normal synthesis is offline. <code>KOKORO_PYTHON</code> and <code>KOKORO_MODEL_CACHE</code> can override the default runtime and cache paths.</p><p>Configure the cloud provider and reviewed pricing using the <a href="../README.md#cloud-setup-and-spending">setup guide</a> before generating a storyboard. Credentials belong in the private environment or ignored <code>.env</code>, never in source or exported artifacts. Local-illustration mode still makes paid cloud text calls; generation starts without a separate cost confirmation.</p></div>
   <div><h3>Regression coverage</h3><p>Unit tests use controlled model responses. Media tests exercise encoding, narration and timing; they are not editorial certification.</p><pre><code>python -m unittest discover -s tests -q
 
 RUN_MEDIA_TESTS=1 python -m unittest discover -s tests -q</code></pre></div>
  </div></section>
 </main>
-<footer class="wrap"><p>Educational Short Clip Demo / Proof of concept / Implementation snapshot: 02 October 2026</p><a href="../README.md">Project README</a><a href="post-generation-rubric.md">Assessment rubric</a><a href="../requirements.txt">Dependencies</a></footer>
+<footer class="wrap"><p>Educational Short Clip Demo / Proof of concept / Implementation snapshot: 16 October 2026 / Audience profiles 4.0 / Card renderer 2.0</p><a href="../README.md">Project README</a><a href="post-generation-rubric.md">Assessment rubric</a><a href="../requirements.txt">App dependencies</a><a href="../requirements-kokoro.txt">Kokoro dependencies</a></footer>
 </body>
 </html>

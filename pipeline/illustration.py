@@ -7,10 +7,7 @@ import re
 import wave
 from pathlib import Path
 
-from pipeline.utils import ffmpeg_bin, run_cmd
-
 LOCAL_PROVIDER = "local-illustration"
-LOCAL_BROLL_MODEL = "local-ffmpeg-zoompan"
 MIN_SHAPES = 6
 MIN_NOTES = 8
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -193,12 +190,3 @@ def render_music(raw, dest: Path) -> dict:
         stream.setframerate(rate)
         stream.writeframes(samples.tobytes())
     return {"notes": len(music["notes"]), "seconds": seconds}
-
-
-def render_broll(still: Path, dest: Path, aspect: str, seconds: int = 4) -> None:
-    width, height = canvas(aspect)
-    frames = seconds * 24
-    zoom = (f"scale={width * 2}:{height * 2},zoompan=z='min(1+0.0016*on,1.18)':x='(iw-iw/zoom)/2':"
-            f"y='(ih-ih/zoom)/2':d={frames}:s={width}x{height}:fps=24,format=yuv420p")
-    run_cmd([ffmpeg_bin(), "-y", "-i", str(still), "-vf", zoom, "-frames:v", str(frames),
-             "-c:v", "libx264", "-preset", "veryfast", "-an", str(dest)])

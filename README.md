@@ -21,8 +21,8 @@ requirements.txt
 - Python 3.11+
 - [ffmpeg](https://ffmpeg.org/) on `PATH`
 - [Ollama](https://ollama.com/) running locally, with a chat model (default `qwen2.5`)
-- Internet access for Edge TTS neural narration (all audiences); macOS `say` only for retired legacy profiles
-- Google Gemini API access for images, Veo video and Lyria music; Google or Portkey for creative text, with reviewed model pricing
+- Local Kokoro runtime for narration; one-time model download, then offline synthesis (see `pipeline/README.md`, Local Kokoro Narration)
+- Google or Portkey access for creative text, with reviewed model pricing; Google image/music access only for explicitly configured direct generation
 
 ```bash
 ollama pull qwen2.5
@@ -72,24 +72,24 @@ The shipped `cloud-pricing.json` uses Portkey text, local illustrations and the 
 music library, with an operator-accepted, unverified USD 0.05 per text/image request.
 Replace `usd_per_request`, `price_source` and `checked_at` with reviewed figures,
 including Vertex token costs and any gateway fees, allowing selected excerpts and
-4096 output tokens per request. Then refresh the estimate and approve a new batch.
-The prior Google-direct price and approval do not transfer to this provider.
+4096 output tokens per request. Generation reads the current configuration automatically;
+the displayed estimate is informational, with no separate cost-approval step.
 
 The adapter uses `Portkey(...).chat.completions.create` with lowercase
 `max_tokens` and a JSON-schema response format. SDK retries and request-level
 gateway retries are disabled; no fallback route is configured. Ensure the Model
 Catalog route also has no account-side fallback. Completed text is cached and
-records Portkey provenance. The Test endpoint is included in approval metadata;
+records Portkey provenance. The Test endpoint is included in batch metadata;
 switching providers or endpoints invalidates old quotes/batches.
 
-Only storyboard text uses Portkey. Selected excerpts and prompts go through Xero
-Test to its configured provider; image/video/music prompts still go directly to Google.
-Keep `GEMINI_API_KEY` for media. Portkey does not resolve the existing Google image
+In Google-direct media mode, only storyboard text uses Portkey. Selected excerpts and prompts go through Xero
+Test to its configured provider; image/music prompts go directly to Google.
+Keep `GEMINI_API_KEY` for that mode. Portkey does not resolve the existing Google image
 quota restriction. To explicitly restore direct Google text, set
 `text_provider: "google"`, an accessible Google text model and reviewed pricing,
-then approve a new batch. No provider switch happens automatically.
+then generate a new batch. No provider switch happens automatically.
 
-### Local Illustration Media (no image/video/music API)
+### Local Illustration Media (no image/music API)
 
 If the gateway only allows text models, set `"media_provider": "local-illustration"`
 (with `"text_provider": "portkey"`) in the pricing file. It is explicit; nothing switches
@@ -98,15 +98,19 @@ to it automatically. The text model writes constrained JSON, never code or marku
 - **Images:** layered geometric shapes (rect, ellipse, polygon, line), validated and
   clamped locally, then drawn with Pillow. Invalid shapes are dropped; fewer than 6 usable
   shapes or a nearly blank render fails the request.
-- **B-roll:** a 4-second pan and zoom of the approved opening illustration (FFmpeg).
 - **Music:** by default the bundled library below; only with `"music_source": "generated"` is it note data rendered by a small local synthesizer (near-silent output is rejected).
 
-Set `models.image` to your Portkey text alias, `models.video` to
-`local-ffmpeg-zoompan`, and give image a conservative text-call estimate;
-video may be `0`. With `music_source: generated` also set `models.music` and its estimate. Each image (and generated music) request is one Portkey text call counted against
+Set `models.image` to your Portkey text alias and give image a conservative text-call estimate.
+With `music_source: generated` also set `models.music` and its estimate. Each image (and generated music) request is one Portkey text call counted against
 the same caps, and a failed or truncated request is not resubmitted in that batch.
 Output is flat conceptual graphics, not photographic imagery, and is labeled
 "AI illustration". Google media credentials are not needed in this mode.
+
+B-roll generation and its picture-in-picture overlay have been removed. Opening and ending
+artwork, source-frame transitions, captions, narration and music remain. The audio mix copies
+the assembled video stream without adding visual overlays. Old working drafts containing
+B-roll must be regenerated and approved again; existing exports and their assessments remain
+unchanged. Legacy video-model/pricing fields are ignored, and video requests are unsupported.
 
 ### Bundled Music Library
 
@@ -122,30 +126,34 @@ tracks carry their own fades, so the mix skips its extra fade-in. Tracks are 64 
 the 30-60 s budget never loops them; an older draft longer than 64 s would loop with
 a short dip. Set `"music_source": "generated"` to go back to model-written music.
 
-### Pricing And Approval
+### Pricing And Batch Limits
 
 `cloud-pricing.example.json` deliberately contains no usable models/prices. Configure
 a private JSON file with the same structure and set `CLOUD_PRICING_FILE` to its path.
-Specify accessible Google model IDs for `text`, `image`, `video` (Veo supporting
-4-second 720p generation) and `music` (Lyria clip). Enter positive conservative
+For Google-direct generation, specify accessible model IDs for `text`, `image` and,
+only with generated music, `music` (Lyria clip). Enter positive conservative
 USD-per-request estimates, their pricing URL and checked date. The text estimate must
 allow selected excerpts plus up to 4096 output tokens. Consult
 [Google pricing](https://ai.google.dev/gemini-api/docs/pricing); account access and
 actual billing must be verified by the operator. Unknown pricing blocks generation.
 
-Each approved batch permits at most four text requests (two fitting rounds with one
-correction each), two images, one 4-second B-roll video and, only when
+Each batch permits at most four text requests (two fitting rounds with one
+correction each), two images and, only when
 `music_source` is `generated`, one instrumental music
-request. The displayed estimate is not a billing guarantee. Uncheck/recheck approval
-to authorize a new batch; keep approval unchanged to resume the existing batch.
-Completed requests are cached and hash-verified. Known video jobs resume by operation
-ID; ambiguous non-video requests are never blindly resubmitted. No silent Ollama fallback.
+request. The displayed estimate is not a billing guarantee or an approval gate.
+Clicking **Confirm clips + generate storyboard**, **Regenerate storyboard**, or
+previewing a missing/stale draft starts a new batch with the current configuration,
+selection and aspect ratio. These actions can incur provider charges without a
+separate confirmation. Loading or refreshing the estimate makes no generation request.
+Within a batch, completed requests are cached and hash-verified; failed or ambiguous
+requests are never blindly resubmitted. A failed generation requires an explicit
+regeneration to start another batch. No silent Ollama fallback.
 Stopping local work does not guarantee cancellation of provider charges.
 
 The configured providers receive selected excerpts and creative prompts, not the complete video.
 Generated visuals are labeled AI illustrations, not evidence of real results/events.
 Music is instrumental only; bundled tracks are vetted, generated music should be checked for unwanted vocals and distraction.
-Veo audio is discarded. Music is ducked under original speech/narration.
+Music is ducked under original speech/narration.
 
 Optional `LOCAL_SFX_MANIFEST` points to JSON containing `file` (relative to the manifest),
 `license`, `source`, `credit`, and `redistributable: true`. Supply only effects whose
@@ -162,11 +170,11 @@ python app.py
    the best-ranked clips that fit the 30-60 s budget (up to 3) are kept and confirmed for you and the
    candidate table marks them `automatic`. The choice is recorded as automatic, with no human review,
    in `selection.json`, the preview status and the Assessment tab. Untick it to review on tab 3.
-3. The cloud estimate loads when the page opens (a blocked estimate explains why). Approve the
-   batch cost, then **Confirm clips + generate storyboard**. To choose by hand, change a Keep box or a
+3. The cloud estimate loads when the page opens (missing configuration explains why generation is blocked).
+  Click **Confirm clips + generate storyboard**, with no cost approval required. To choose by hand, change a Keep box or a
    clip time on Review first; that switches the record to manual.
     The app fits complete ideas to 30-60 seconds, generates the storyboard with the configured text model,
-    measures narration, generates illustrations/B-roll, picks the audience's bundled music track, and renders the preview.
+    measures narration, generates card illustrations, picks the audience's bundled music track, and renders the preview.
     Inspect the automatic selection-change report: fitting may trim or remove kept clips.
     In **Package + export**, review the preview; the status line names the narrator, music track and accent
     words. Once media exists, changing any text or timing needs **Regenerate storyboard**.
@@ -176,7 +184,7 @@ python app.py
 4. Enter the human reviewer's name, attest the review, approve the storyboard,
    then export one compilation.
 
-Two steps always need a person: approving the cloud cost and approving the storyboard preview.
+Human approval of the storyboard preview is still required before export.
 
 Opening, bridge and ending cards are styled per audience: Researcher uses a serif face,
 thin rules and labels such as "Research question"; General public uses heavy type, coral
@@ -326,27 +334,26 @@ must still fit 30-60 seconds; shorten the wording or adjust selected clips if it
 not. The reflection and source credit remain visual. Narration is included in the SRT
 sidecar and its text, voice, rate and duration are recorded in the export timeline.
 
-Audience profiles set wording, voice and speaking rate automatically. All three use
-Edge TTS neural voices: Researcher `en-US-SteffanNeural` at -5%, General public
-`en-US-AvaNeural` at +0%, Kids `en-US-AnaNeural` at -20%. Profiles record a nominal
-words-per-minute rate (166, 175, 140) against a 175 reference; that figure is converted
-to the percentage offset Edge expects. It is a relative setting, not a measured pace,
-and different voices speak at different base speeds, so compare measured durations in
-the export timeline rather than the nominal numbers.
+Audience profiles set wording, voice and speaking rate automatically using local
+Kokoro: Researcher `am_michael` at 0.95x, General public `af_heart` at 1.0x, Kids
+`af_sky` at 0.98x with a +2-semitone pitch/formant effect. The Kids preset is a
+synthetic childlike effect, not a dedicated child voice. Profiles also retain a nominal
+words-per-minute rate for metadata, but measured audio duration controls card timing.
+Provider, model, voice, speed and pitch settings are recorded in the export timeline.
 There is no manual voice selector or voice cloning. The target audience determines
 the voice for the intro, bridge frames and ending; original lecture audio is unchanged.
 Changing audience requires re-nomination and a new storyboard preview and approval.
-Audience profile version 3.0 retired the macOS Samantha and Daniel voices. Saved runs
+Audience profile version 4.0 replaces Edge TTS with local Kokoro. Saved runs
 on an older profile version are migrated on load: candidates and the storyboard draft
 are cleared and must be regenerated. Previously exported videos do not change, and
 their recorded voice and rate are still what the assessment checks them against.
 
-All narration requires internet access for Edge TTS, not AWS. The Edge client is
-unofficial and availability is not guaranteed, and this now applies to every audience
-rather than Kids alone. Failures block narration explicitly; no substitute voice and no
-silent fallback is used. Generated card text is sent to that service for all audiences.
-Retired legacy profiles keep their macOS `say` voice so older drafts still render
-locally; nothing falls back to `say` when a neural voice fails.
+Kokoro runs in a separate Python 3.12 environment. Follow the one-time setup in
+[`pipeline/README.md`](pipeline/README.md#local-kokoro-narration); the model download
+requires internet access, but synthesis runs locally in offline mode without an API
+key. Narration text is not sent to a cloud speech service. Missing local setup blocks
+narration explicitly; no silent fallback is used. Retired macOS profiles keep their
+explicit `say` voice, while saved Edge profiles require regeneration.
 Missing speech synthesis or a missing voice fails explicitly instead of exporting a
 silent card. Previously saved storyboards without narration settings stay silent.
 

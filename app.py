@@ -647,32 +647,20 @@ def draft_package_storyboard(state, aspect_ratio, *, generated=None):
 def refresh_cloud_quote():
     try:
         quote = cloud_quote()
-        return quote, quote_markdown(quote), False
+        return quote_markdown(quote)
     except (ValueError, OSError) as exc:
-        return None, f"**Cloud estimate unavailable, so generation is blocked.** {exc}", False
-
-
-def approve_cloud_budget(state, quote, accepted, aspect_ratio, *row_values):
-    state = dict(state or empty_state())
-    state["cloud_approval"] = None
-    if accepted:
-        if not quote or quote != cloud_quote():
-            raise gr.Error("Refresh the cloud estimate before approving it.")
-        confirmed = confirm_selection(state, *row_values)[0]
-        revision = confirmed["approval_revision"]
-        state["cloud_approval"] = {"quote": quote, "current_revision": revision,
-                                   "scope": data_hash({"selection": revision, "aspect": aspect_ratio}),
-                                   "aspect": aspect_ratio, "batch_id": uuid.uuid4().hex}
-    return state
+        return f"**Cloud configuration unavailable, so generation is blocked.** {exc}"
 
 
 def open_cloud_batch(state, aspect_ratio):
-    approval = state.get("cloud_approval") or {}
-    if (approval.get("current_revision") != selection_revision(state, state.get("approved") or [])
-            or approval.get("aspect") != aspect_ratio):
-        raise ValueError("Approve the current cloud estimate on Review before confirming or regenerating this selection.")
-    return CloudBatch(Path(state["work"]) / "cloud" / approval["batch_id"], approval["quote"],
-                      consent=True, scope=approval["scope"])
+    revision = selection_revision(state, state.get("approved") or [])
+    batch_config = {"quote": cloud_quote(), "current_revision": revision,
+                    "scope": data_hash({"selection": revision, "aspect": aspect_ratio}),
+                    "aspect": aspect_ratio, "batch_id": uuid.uuid4().hex}
+    batch = CloudBatch(Path(state["work"]) / "cloud" / batch_config["batch_id"], batch_config["quote"],
+                       scope=batch_config["scope"])
+    state["cloud_batch"] = batch_config
+    return batch
 
 
 def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress()):
@@ -698,9 +686,9 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
             reports.append(report)
             state["approved"] = clips
             state["approval_revision"] = selection_revision(state, clips)
-            state["cloud_approval"] = dict(state.get("cloud_approval") or {}, current_revision=state["approval_revision"])
+            state["cloud_batch"] = dict(state.get("cloud_batch") or {}, current_revision=state["approval_revision"])
             state["fit_report"] = reports
-            progress(0.15, desc="Generating hook, bridges and ending with the approved text provider")
+            progress(0.15, desc="Generating hook, bridges and ending with the configured text provider")
             draft = generate_storyboard(batch.quote["items"]["text"]["model"], clips, audience,
                                         state.get("source_url") or "", request=batch.text)
             draft["aspect_ratio"] = aspect_ratio
@@ -709,8 +697,8 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
                 break
             overhead = measured - sum(clip["end"] - clip["start"] for clip in clips) - (len(clips) - 1) * 3
         else:
-            raise ValueError(f"Measured narration produces {measured:.2f}s after two fitting attempts. Adjust the selection and approve a new batch.")
-        progress(0.35, desc="Generating approved illustrations, B-roll and music")
+            raise ValueError(f"Measured narration produces {measured:.2f}s after two fitting attempts. Adjust the selection and regenerate.")
+        progress(0.35, desc="Preparing illustrations and music")
         prepare_media(draft, batch, aspect_ratio)
         draft["fit_report"] = reports
         result = draft_package_storyboard(state, aspect_ratio, generated=draft)
@@ -1052,9 +1040,9 @@ def build_app():
         gr.Markdown(
             "# Educational Short Clip Demo\n"
             "**Workflow:** 1 upload and transcribe → 2 nominate (clips are chosen automatically) → "
-            "3 approve the cloud cost and generate the storyboard → 4 review the preview, approve and export → 5 assess.\n\n"
+            "3 generate the storyboard → 4 review the preview, approve and export → 5 assess.\n\n"
             "Narrator voice, cards, music and clip choice are automatic for the target audience. "
-            "Two human steps remain: **approving the cloud cost** and **approving the storyboard preview**."
+            "**Human approval of the storyboard preview is required before export.**"
         )
         stack_status = gr.Markdown("Checking Ollama and ffmpeg...")
 
@@ -1062,8 +1050,8 @@ def build_app():
             with gr.Tab("1. Input"):
                 video = gr.Video(label="Source video (local mp4)", sources=["upload"])
                 target_audience = gr.Dropdown(list(AUDIENCE_GOALS), value=DEFAULT_AUDIENCE, label="Target audience",
-                                              info="Sets the clip goals, narrator (Researcher: Steffan, General public: Ava, Kids: Ana; "
-                                                   "neural voices need an internet connection), card style and background music.")
+                                             info="Local Kokoro: Researcher - Michael; General public - Heart; "
+                                                 "Kids - Sky (+2 semitones). Offline narration after setup.")
                 source_url = gr.Textbox(label="Source video URL (for CTA / post.txt)")
                 with gr.Row():
                     min_s = gr.Slider(3, 20, value=6, step=1, label="Min clip seconds")
@@ -1097,16 +1085,13 @@ def build_app():
 
             with gr.Tab("3. Review"):
                 gr.Markdown(
-                    "With automatic selection on, the clips below are already kept and confirmed: approve the cloud cost, "
-                    "then generate. Change a Keep box or a time to take over manually. If you review, keep a clip only if it is "
+                    "With automatic selection on, the clips below are already kept and confirmed: generate the storyboard. "
+                    "Change a Keep box or a time to take over manually. If you review, keep a clip only if it is "
                     "**on-topic**, standalone, and one knowledge point. A weak opening is OK — adjust start/end instead of discarding."
                 )
                 kept_md = gr.Markdown(f"**Kept: 0 / {MIN_KEEP}–{MAX_KEEP} required**")
-                quote_state = gr.State(None)
                 quote_view = gr.Markdown("Cloud pricing not loaded.")
                 quote_button = gr.Button("Refresh cloud estimate")
-                cloud_consent = gr.Checkbox(label="Approve this estimated cloud batch cost and send selected excerpts to the providers listed above",
-                                            info="Required before generating. Approval is for the current selection and aspect ratio.")
                 confirm_btn = gr.Button("Confirm clips + generate storyboard", variant="primary", interactive=False)
                 fit_report_view = gr.Textbox(label="Automatic selection changes", lines=8, interactive=False)
                 review_status = gr.Markdown("Nominate clips first.")
@@ -1152,7 +1137,7 @@ def build_app():
                 gr.Markdown("### Storyboard")
                 gr.Markdown("Hook, bridges, ending, accent words, narration and music are generated for the target audience. "
                             "Once media exists, changing any text or timing below requires **Regenerate storyboard** "
-                            "(new approved batch); the preview you approve is the one that is exported.")
+                            "(new cloud batch); the preview you approve is the one that is exported.")
                 draft_storyboard_btn = gr.Button("Regenerate storyboard")
                 storyboard_status = gr.Markdown("Confirm clips before drafting a storyboard.")
                 storyboard_duration = gr.Markdown(f"Compilation duration: no confirmed clips. Target: {DURATION_BUDGET['min_seconds']}-{DURATION_BUDGET['max_seconds']}s.")
@@ -1213,11 +1198,8 @@ def build_app():
                              overlay_position, aspect_ratio]
         storyboard_reset_outputs = [state, storyboard_status, storyboard_preview, storyboard_attested, export_btn]
         storyboard_draft_outputs = [*storyboard_reset_outputs, storyboard_evidence, *storyboard_fields[:-1], *join_groups]
-        quote_button.click(refresh_cloud_quote, [], [quote_state, quote_view, cloud_consent],
+        quote_button.click(refresh_cloud_quote, [], [quote_view],
                    concurrency_id="audience_pipeline")
-        cloud_consent.input(approve_cloud_budget,
-                    [state, quote_state, cloud_consent, aspect_ratio, *cids, *titles, *takeaways, *starts, *ends, *keeps],
-                    [state], concurrency_id="audience_pipeline")
         for field in [state, *storyboard_fields]:
             field.change(storyboard_duration_status, [state, *storyboard_fields], [storyboard_duration],
                           concurrency_id="audience_pipeline")
@@ -1321,7 +1303,7 @@ def build_app():
             concurrency_id="audience_pipeline",
         ).success(refresh_assessment_exports, [compilation_video], [assessment_export])
         demo.load(ping_stack, [model], [model, stack_status])
-        demo.load(refresh_cloud_quote, [], [quote_state, quote_view, cloud_consent])
+        demo.load(refresh_cloud_quote, [], [quote_view])
         demo.load(refresh_assessment_exports, [], [assessment_export])
     return demo
 

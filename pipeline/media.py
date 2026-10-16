@@ -92,12 +92,6 @@ def prepare_media(draft, batch, aspect):
         prompt = style["visual"] + safety + f"{role.capitalize()} illustration. Illustrate the supported central concept: " + json.dumps(evidence)
         assets[role] = batch.asset("image", prompt, aspect)
         assets[role]["evidence_ids"] = section["evidence_ids"]
-    if batch.quote["items"]["video"].get("provider") == "local-illustration":
-        assets["broll"] = batch.local_broll(assets["opening"], aspect)
-    else:
-        assets["broll"] = batch.asset("video", style["visual"] + safety + "Gentle motion, no dialogue. "
-                                      + json.dumps(draft["evidence"][:1]), aspect)
-    assets["broll"]["evidence_ids"] = [draft["clip_ids"][0]]
     if "music" in batch.quote["items"]:
         assets["music"] = batch.asset("music", style["music"] + ". Instrumental only; no speech or lyrics. Seamless background loop.")
     else:
@@ -116,17 +110,20 @@ def prepare_media(draft, batch, aspect):
         assets["sfx"] = {"path": str(path), "sha256": file_hash(path), "kind": "sfx",
                          **{key: sound[key] for key in ("license", "source", "credit")}}
     draft["media_assets"] = assets
-    draft["creative_version"] = "1.0"
+    draft["creative_version"] = "2.0"
     draft["music_gain"] = style["gain"]
     verify_media(draft)
 
 
 def verify_media(draft):
-    for asset in draft.get("media_assets", {}).values():
+    assets = draft.get("media_assets", {})
+    if "broll" in assets or any(asset.get("kind") == "video" for asset in assets.values()):
+        raise ValueError("B-roll is no longer supported. Regenerate and approve a new preview.")
+    for asset in assets.values():
         path = Path(asset["path"])
         if not path.is_file() or file_hash(path) != asset["sha256"]:
             raise ValueError("Reviewed media is missing or changed. Regenerate and approve a new preview.")
-        if asset["kind"] in {"video", "music", "sfx"} and media_duration(path) <= 0:
+        if asset["kind"] in {"music", "sfx"} and media_duration(path) <= 0:
             raise ValueError("Generated media has no measurable duration.")
 
 
@@ -142,39 +139,25 @@ def mix_media(source, dest, draft, timeline, width, height, work):
     fade = min(0.5, music_duration / 4)
     run_cmd([ffmpeg_bin(), "-y", "-i", music, "-i", music, "-filter_complex",
              f"[0:a][1:a]acrossfade=d={fade}:c1=tri:c2=tri[out]", "-map", "[out]", str(loop)])
-    command = [ffmpeg_bin(), "-y", "-i", str(source), "-stream_loop", "-1", "-i", str(loop),
-               "-i", assets["broll"]["path"]]
-    first = next(item for item in timeline if item["kind"] == "clip")
-    start = first["start"] + min(1, first["duration"] / 4)
-    end = min(start + 4, first["start"] + first["duration"])
-    box_w, box_h = max(2, int(width * 0.30) // 2 * 2), max(2, int(height * 0.25) // 2 * 2)
-    from PIL import Image, ImageDraw
-    label = Image.new("RGBA", (box_w, max(18, int(height * 0.035))), (0, 0, 0, 230))
-    ImageDraw.Draw(label).text((5, 3), "AI illustration", fill="white")
-    label_path = Path(work) / "ai_label.png"
-    label.save(label_path)
-    command += ["-loop", "1", "-i", str(label_path)]
+    command = [ffmpeg_bin(), "-y", "-i", str(source), "-stream_loop", "-1", "-i", str(loop)]
     # Cards carry no lecturer speech, so the bed swells there (0.5s ramps) to be heard under the narration.
     swell = "+".join(f"clip(min((t-{item['start']:.3f})/0.5,({item['start'] + item['duration']:.3f}-t)/0.5),0,1)"
                      for item in timeline if item["kind"] != "clip")
     bed_gain = f"volume='{draft['music_gain']}*(1+{CARD_MUSIC_BOOST - 1}*({swell or '0'}))':eval=frame"
-    filters = [f"[2:v]scale={box_w}:{box_h}:force_original_aspect_ratio=decrease,pad={box_w}:{box_h}:(ow-iw)/2:(oh-ih)/2,setpts=PTS-STARTPTS+{start}/TB[broll]",
-               f"[0:v][broll]overlay=W-w-12:12:eof_action=pass:enable='between(t,{start},{end})'[visual]",
-               f"[visual][3:v]overlay=W-w-12:{12 + box_h}:enable='between(t,{start},{end})'[video]",
-               "[0:a]asplit=2[speech][detector]",
+    filters = ["[0:a]asplit=2[speech][detector]",
                f"[1:a]{bed_gain},{'' if assets['music'].get('provider') == 'library' else 'afade=t=in:d=1,'}afade=t=out:st={max(0, duration-2)}:d=2[bed]",
                "[bed][detector]sidechaincompress=threshold=0.04:ratio=3:attack=15:release=300[ducked]",
                "[speech][ducked]amix=inputs=2:duration=first:normalize=0[mixed]"]
     if "sfx" in assets:
         command += ["-i", assets["sfx"]["path"]]
-        filters += ["[4:a]volume=0.08,atrim=duration=0.6[effect]",
+        filters += ["[2:a]volume=0.08,atrim=duration=0.6[effect]",
                     "[mixed][effect]amix=inputs=2:duration=first:normalize=0[with_effect]"]
         audio = "with_effect"
     else:
         audio = "mixed"
     filters += [f"[{audio}]loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.8:level=disabled[audio]"]  # level=disabled stops the limiter re-normalizing; headroom covers AAC overshoot.
-    command += ["-filter_complex", ";".join(filters), "-map", "[video]", "-map", "[audio]", "-t", str(duration),
-                "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", str(dest)]
+    command += ["-filter_complex", ";".join(filters), "-map", "0:v:0", "-map", "[audio]", "-t", str(duration),
+                "-c:v", "copy", "-c:a", "aac", "-ar", "44100", str(dest)]
     run_cmd(command)
     validate_compilation_duration(media_duration(dest), draft["duration_budget"])
     return dest

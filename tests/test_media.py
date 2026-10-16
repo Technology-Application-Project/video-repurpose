@@ -13,6 +13,43 @@ from pipeline.utils import ffmpeg_bin, format_timestamp, media_duration
 
 @unittest.skipUnless(os.environ.get("RUN_MEDIA_TESTS") == "1", "Set RUN_MEDIA_TESTS=1 for ffmpeg integration tests")
 class MediaTests(unittest.TestCase):
+    def test_audio_mix_preserves_video_with_and_without_sound_effect(self):
+        from pipeline.media import mix_media
+        from pipeline.project import file_hash
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.mp4"
+            music = root / "music.wav"
+            subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-f", "lavfi", "-i",
+                            "testsrc2=size=160x90:rate=24", "-f", "lavfi", "-i",
+                            "sine=frequency=440:sample_rate=44100", "-t", "30", "-c:v", "libx264",
+                            "-pix_fmt", "yuv420p", "-c:a", "aac", str(source)], check=True, capture_output=True)
+            subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-f", "lavfi", "-i",
+                            "sine=frequency=220:sample_rate=44100", "-t", "2", str(music)],
+                           check=True, capture_output=True)
+
+            def video_hash(path):
+                return subprocess.run([ffmpeg_bin(), "-v", "error", "-i", str(path), "-map", "0:v:0",
+                                       "-f", "hash", "-hash", "sha256", "-"], check=True, capture_output=True).stdout
+
+            expected = video_hash(source)
+            for with_sfx in (False, True):
+                with self.subTest(with_sfx=with_sfx):
+                    assets = {"music": {"path": str(music), "sha256": file_hash(music),
+                                        "kind": "music", "provider": "library"}}
+                    if with_sfx:
+                        assets["sfx"] = dict(assets["music"], kind="sfx")
+                    draft = {"media_assets": assets, "music_gain": 0.3,
+                             "duration_budget": {"min_seconds": 30, "max_seconds": 60}}
+                    output = mix_media(source, root / f"mix-{with_sfx}.mp4", draft,
+                                       [{"kind": "clip", "start": 0, "duration": 30}], 160, 90, root)
+                    self.assertEqual(video_hash(output), expected)
+                    self.assertAlmostEqual(media_duration(output), 30, delta=0.15)
+                    subprocess.run([ffmpeg_bin(), "-v", "error", "-i", str(output), "-map", "0:a:0",
+                                    "-f", "null", "-"], check=True, capture_output=True)
+                    self.assertFalse((root / "ai_label.png").exists())
+
     def test_generated_media_all_audiences_and_aspects(self):
         import array
         import io
@@ -33,11 +70,6 @@ class MediaTests(unittest.TestCase):
             raw = root / "raw.mp4"
             subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-i", str(source), "-t", "15", "-c", "copy", str(raw)],
                            check=True, capture_output=True)
-            broll = root / "broll.mp4"
-            subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-f", "lavfi", "-i",
-                            "color=c=cyan:size=320x180:rate=24", "-f", "lavfi", "-i",
-                            "sine=frequency=1800:sample_rate=44100", "-t", "4", "-c:v", "libx264",
-                            "-c:a", "aac", str(broll)], check=True, capture_output=True)
             music = root / "music.wav"
             subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-f", "lavfi", "-i",
                             "sine=frequency=330:sample_rate=44100", "-t", "30", str(music)], check=True, capture_output=True)
@@ -65,7 +97,7 @@ class MediaTests(unittest.TestCase):
                         draft = draft_storyboard(clips, audience)
                         draft.update(aspect_ratio=aspect, duration_budget=dict(DURATION_BUDGET), music_gain=0.08,
                                      media_assets={"opening": asset(bitmap, "image"), "ending": asset(bitmap, "image"),
-                                                   "broll": asset(broll, "video"), "music": asset(music, "music")})
+                                                   "music": asset(music, "music")})
                         with patch("pipeline.assemble._synthesize_title", side_effect=speech) as synth:
                             self.assertTrue(30 <= prepare_narration(draft, clips, work) <= 60)
                             calls = synth.call_count
@@ -106,6 +138,7 @@ class MediaTests(unittest.TestCase):
                                     aspect_ratio=aspect, storyboard=draft, storyboard_approval={"kind": "human"})
                             destination = Path(exported[3]).parent
                             manifest = json.loads((destination / "selection.json").read_text())
+                            self.assertNotIn("broll", manifest["asset_inventory"])
                             hashes = artifact_hashes(destination)
                             with zipfile.ZipFile(exported[2]) as bundle:
                                 for item in manifest["asset_inventory"].values():
@@ -115,26 +148,25 @@ class MediaTests(unittest.TestCase):
                                                         list(srt.parse((destination / "captions.srt").read_text())))
                             self.assertTrue(all(item["status"] == "pass" for item in metrics), metrics)
 
-    def ana_audio(self, text, **request):
-        self.assertEqual(request["voice"], "en-US-AnaNeural")
-        self.assertEqual(request["rate"], "-20%")
+    def kokoro_audio(self, text, path, **request):
+        self.assertEqual(request["voice"], "af_sky")
+        self.assertEqual(request["speed"], 0.98)
+        self.assertEqual(request["pitch_semitones"], 2)
         seconds = max(1, len(text.split()) * 60 / 140)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-f", "lavfi", "-i",
+                        "sine=frequency=440:sample_rate=24000", "-t", str(seconds),
+                        str(path)], check=True, capture_output=True)
+        path.with_suffix(".txt").write_text(text)
+        return path
 
-        def save(path):
-            subprocess.run([ffmpeg_bin(), "-y", "-v", "error", "-f", "lavfi", "-i",
-                            "sine=frequency=440:sample_rate=16000", "-t", str(seconds),
-                            str(path)], check=True, capture_output=True)
-
-        from types import SimpleNamespace
-        return SimpleNamespace(save_sync=save)
-
-    @patch("edge_tts.Communicate")
-    def test_narrated_intro_and_default_transition_frames_shift_captions(self, communicate):
+    @patch("pipeline.kokoro_tts.synthesize")
+    def test_narrated_intro_and_default_transition_frames_shift_captions(self, synthesize):
         import array
         import json
         from PIL import Image
 
-        communicate.side_effect = self.ana_audio
+        synthesize.side_effect = self.kokoro_audio
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             sources = []
@@ -157,7 +189,7 @@ class MediaTests(unittest.TestCase):
             for aspect in ("16:9", "9:16"):
                 with self.subTest(aspect=aspect):
                     draft = draft_storyboard(clips, "Kids")
-                    voice = "en-US-AnaNeural"
+                    voice = "af_sky"
                     draft["aspect_ratio"] = aspect
                     work = root / aspect.replace(":", "-")
                     output = assemble_compilation(sources, work / "out.mp4", intro_title="", clips=clips,
@@ -168,7 +200,9 @@ class MediaTests(unittest.TestCase):
                                      ["opening", "clip", "divider", "clip", "divider", "clip", "ending"])
                     intro, first, bridge, second, next_bridge, third, ending = timeline
                     self.assertEqual(intro["narration"]["text"], clips[0]["title"])
-                    self.assertEqual(intro["narration"]["rate"], 140)
+                    self.assertEqual(intro["narration"]["provider"], "kokoro")
+                    self.assertEqual(intro["narration"]["speed"], 0.98)
+                    self.assertEqual(intro["narration"]["pitch_semitones"], 2)
                     self.assertGreater(intro["duration"], draft["opening"]["seconds"])
                     self.assertGreaterEqual(intro["duration"], intro["narration"]["seconds"] + 0.35)
                     self.assertAlmostEqual(first["start"], intro["duration"], delta=0.04)
@@ -176,7 +210,7 @@ class MediaTests(unittest.TestCase):
                     self.assertEqual(bridge["text"], clips[1]["title"])
                     self.assertEqual(bridge["narration"]["text"], bridge["text"])
                     self.assertEqual(bridge["narration"]["voice"], voice)
-                    self.assertEqual(bridge["narration"]["rate"], 140)
+                    self.assertEqual(bridge["narration"]["rate"], 171)
                     self.assertGreater(bridge["duration"], draft["transitions"][0]["seconds"])
                     self.assertGreaterEqual(bridge["duration"], bridge["narration"]["seconds"] + 0.35)
                     self.assertAlmostEqual(media_duration(output), ending["start"] + ending["duration"], delta=0.15)
@@ -187,7 +221,7 @@ class MediaTests(unittest.TestCase):
                     self.assertIn(format_timestamp(bridge["start"] + 0.15), captions)
                     self.assertIn(bridge["text"], captions)
                     self.assertEqual(next_bridge["narration"]["text"], clips[2]["title"])
-                    self.assertEqual(next_bridge["narration"]["rate"], 140)
+                    self.assertEqual(next_bridge["narration"]["rate"], 171)
                     self.assertGreaterEqual(next_bridge["duration"], next_bridge["narration"]["seconds"] + 0.35)
                     self.assertAlmostEqual(third["start"], next_bridge["start"] + next_bridge["duration"], delta=0.04)
                     self.assertIn(format_timestamp(third["start"]), captions)
@@ -216,12 +250,12 @@ class MediaTests(unittest.TestCase):
                         amplitudes.frombytes(samples.stdout)
                         self.assertGreater(max(abs(sample) for sample in amplitudes), 0.01)
 
-    @patch("edge_tts.Communicate")
-    def test_slow_ending_narration_extends_card_and_is_audible(self, communicate):
+    @patch("pipeline.kokoro_tts.synthesize")
+    def test_slow_ending_narration_extends_card_and_is_audible(self, synthesize):
         import array
         import json
 
-        communicate.side_effect = self.ana_audio
+        synthesize.side_effect = self.kokoro_audio
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source.mp4"
@@ -236,8 +270,10 @@ class MediaTests(unittest.TestCase):
             output = assemble_compilation([source], root / "out.mp4", intro_title="", clips=clips,
                                           storyboard=draft, work=root, srt_path=root / "captions.srt")
             ending = json.loads((root / "timeline.json").read_text())[-1]
-            self.assertEqual(ending["narration"]["voice"], "en-US-AnaNeural")
-            self.assertEqual(ending["narration"]["rate"], 140)
+            self.assertEqual(ending["narration"]["voice"], "af_sky")
+            self.assertEqual(ending["narration"]["rate"], 171)
+            self.assertEqual(ending["narration"]["provider"], "kokoro")
+            self.assertEqual(ending["narration"]["pitch_semitones"], 2)
             self.assertIn(draft["ending"]["cta"], ending["narration"]["text"])
             self.assertGreater(ending["duration"], draft["ending"]["seconds"])
             self.assertGreaterEqual(ending["duration"], ending["narration"]["seconds"] + 0.35)

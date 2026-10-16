@@ -6,6 +6,7 @@ import math
 import re
 
 from pipeline.cloud import request_text
+from pipeline.kokoro_tts import cache_identity
 
 
 STORYBOARD_VERSION = "2.0"
@@ -15,7 +16,7 @@ PREVIOUS_DURATION_BUDGET = {"min_seconds": 60, "max_seconds": 90}
 LEGACY_DURATION_BUDGET = {"min_seconds": 45, "max_seconds": 120}
 ALLOWED_DURATION_BUDGETS = (DURATION_BUDGET, PREVIOUS_DURATION_BUDGET, LEGACY_DURATION_BUDGET)
 DEFAULT_AUDIENCE = "General public"
-AUDIENCE_PROFILE_VERSION = "3.0"
+AUDIENCE_PROFILE_VERSION = "4.0"
 TRANSITION_MODES = ["Cut", "Overlay", "Divider"]
 LEGACY_AUDIENCE_PROFILES = {
     "General audience": {"voice": "Samantha", "rate": 170, "style": "Clear, conversational, concrete; explain unfamiliar terms."},
@@ -26,13 +27,10 @@ LEGACY_AUDIENCE_PROFILES = {
     "Professionals": {"voice": "Daniel", "rate": 185, "style": "Concise, measured, professional; emphasize applications and constraints."},
     "Advanced learners": {"voice": "Daniel", "rate": 180, "style": "Precise and analytical; highlight assumptions and nuanced implications."},
 }
-# Every current profile uses an Edge TTS neural voice. `rate` stays a nominal
-# words-per-minute figure so export metadata, assessment checks and the legacy `say`
-# profiles below keep one comparable scale; _synthesize_title converts it for Edge.
 AUDIENCE_PROFILES = {
-    "Researcher": {"voice": "en-US-SteffanNeural", "rate": 166, "style": "Lead with a research question; preserve methods, evidence, assumptions and limitations. Never invent results."},
-    "General public": {"voice": "en-US-AvaNeural", "rate": 175, "style": "Lead with concrete everyday relevance; explain unfamiliar terms and preserve important caveats."},
-    "Kids": {"voice": "en-US-AnaNeural", "rate": 140, "style": "For ages 8-12: one concrete idea, short familiar words, a curiosity question and a safe activity. No baby talk."},
+    "Researcher": {**cache_identity(), "voice": "am_michael", "rate": 166, "speed": 0.95, "pitch_semitones": 0, "style": "Lead with a research question; preserve methods, evidence, assumptions and limitations. Never invent results."},
+    "General public": {**cache_identity(), "voice": "af_heart", "rate": 175, "speed": 1.0, "pitch_semitones": 0, "style": "Lead with concrete everyday relevance; explain unfamiliar terms and preserve important caveats."},
+    "Kids": {**cache_identity(), "voice": "af_sky", "rate": 171, "speed": 0.98, "pitch_semitones": 2, "style": "For ages 8-12: one concrete idea, short familiar words, a curiosity question and a safe activity. No baby talk."},
 }
 AUDIENCE_GOALS = {
     "Researcher": ["Explain the research question, methods and evidence.",

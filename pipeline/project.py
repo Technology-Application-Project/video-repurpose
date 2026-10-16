@@ -71,7 +71,7 @@ def load_checkpoint(run_id: str, root: Path = WORK_ROOT) -> dict:
         if path and (not Path(path).resolve().is_relative_to(directory) or not Path(path).is_file()):
             candidate.pop("preview_path", None)
     state.update(confirmed=False, approval_revision=None, storyboard_approval=None,
-                 storyboard_preview_revision=None, cloud_approval=None)
+                 storyboard_preview_revision=None, cloud_batch=None)
     from pipeline.storyboard import AUDIENCE_PROFILE_VERSION, DURATION_BUDGET
     if state.get("audience_profile_version") != AUDIENCE_PROFILE_VERSION:
         state.update(storyboard_draft=None, candidates=[], approved=[], fit_report=None,

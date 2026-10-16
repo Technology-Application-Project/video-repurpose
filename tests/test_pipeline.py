@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import app
-from pipeline.assemble import _edge_rate, _is_neural_voice, _synthesize_title
+from pipeline.assemble import _synthesize_title
 from pipeline.assess import ARTIFACTS, DIMENSIONS, GATES, artifact_hashes, assess_export, review_template, score_review
 from pipeline.contracts import selection_revision
 from pipeline.export import export_clips
@@ -32,7 +32,11 @@ class CloudQuoteTests(unittest.TestCase):
                 path.write_text(json.dumps(config))
                 quote = cloud_quote()
                 self.assertEqual(quote["items"]["image"]["provider"], "local-illustration")
-                self.assertEqual(quote["items"]["video"]["usd_per_request"], 0)
+                self.assertNotIn("video", quote["items"])
+                for field in ("models", "usd_per_request"):
+                    config[field].pop("video")
+                path.write_text(json.dumps(config))
+                self.assertEqual(cloud_quote(), quote)
                 self.assertAlmostEqual(quote["total_usd"], 0.30)
                 self.assertNotIn("music", quote["items"])
                 self.assertEqual(quote["music_source"], "library")
@@ -48,7 +52,6 @@ class CloudQuoteTests(unittest.TestCase):
                     cloud_quote()
                 path.write_text(json.dumps(config))
                 for change, message in ((lambda c: c.update(text_provider="google"), "requires text_provider portkey"),
-                                        (lambda c: c["models"].update(video="veo"), "local-ffmpeg-zoompan"),
                                         (lambda c: c["usd_per_request"].update(image=0), "positive"),
                                         (lambda c: c["models"].update(image="gemini-image"), "@provider/model")):
                     changed = copy.deepcopy(config)
@@ -76,7 +79,7 @@ class CloudQuoteTests(unittest.TestCase):
                 self.assertEqual(routed["items"]["text"]["base_url"], "https://llm-gateway.xgw.xero-test.com/v1")
                 with patch.dict("os.environ", {"XERO_PORTKEY_API_KEY": "test-only"}):
                     with self.assertRaisesRegex(ValueError, "Cloud pricing or models changed"):
-                        CloudBatch(Path(directory) / "batch", original, consent=True, scope="selection")
+                        CloudBatch(Path(directory) / "batch", original, scope="selection")
                 config["usd_per_request"]["text"] = None
                 path.write_text(json.dumps(config))
                 with self.assertRaises(ValueError):
@@ -88,13 +91,31 @@ class CloudQuoteTests(unittest.TestCase):
 
 
 class CloudWorkflowTests(unittest.TestCase):
+    def test_generation_opens_fresh_scoped_batch_without_cost_approval(self):
+        clip = {"id": "c1", "start": 0, "end": 8, "title": "Check assumptions", "takeaway": "Check assumptions."}
+        state = app.empty_state()
+        state.update(run_id="test", work=str(self.root), approved=[clip])
+        with patch("app.cloud_quote", return_value=self.quote):
+            first = app.open_cloud_batch(state, "16:9")
+            first_config = dict(state["cloud_batch"])
+            second = app.open_cloud_batch(state, "9:16")
+        self.assertNotEqual(first.directory, second.directory)
+        self.assertNotEqual(first.scope, second.scope)
+        self.assertEqual(state["cloud_batch"]["aspect"], "9:16")
+        self.assertEqual(state["cloud_batch"]["current_revision"], selection_revision(state, [clip]))
+        self.assertEqual(first_config["quote"], self.quote)
+        self.assertEqual(first._load()["requests"], {})
+        self.assertEqual(second._load()["requests"], {})
+        first.close()
+        second.close()
+
     def test_confirmation_fits_generates_and_synchronizes_review_rows(self):
         state = app.empty_state()
         segments = [{"start": index * 10, "end": (index + 1) * 10, "text": "Check assumptions before applying advice."}
                     for index in range(12)]
         clip = {"id": "c1", "start": 0, "end": 118.89, "title": "Check assumptions", "takeaway": "Check assumptions."}
         state.update(run_id="test", work=str(self.root), source_duration=120, transcript={"segments": segments},
-                     candidates=[clip], min_s=20, max_s=90, cloud_approval={})
+                     candidates=[clip], min_s=20, max_s=90)
         rows = []
         for value, empty in (("c1", ""), (clip["title"], ""), (clip["takeaway"], ""), (0, 0), (118.89, 0), (True, False)):
             rows.extend([value, *([empty] * (app.MAX_REVIEW - 1))])
@@ -102,8 +123,9 @@ class CloudWorkflowTests(unittest.TestCase):
                     "ending": {"takeaway": "Check assumptions before applying advice.", "question": "Which assumption would you check?",
                                "cta": "Explain one assumption.", "seconds": 5, "evidence_ids": ["c1"]}, "transitions": []}
         request = Mock(return_value={"message": {"content": json.dumps(response)}, "provider": "portkey"})
-        batch = SimpleNamespace(quote={"items": {"text": {"model": "test-gemini"}}}, text=request, close=Mock())
-        with patch("app.open_cloud_batch", return_value=batch), patch("pipeline.fit.review_candidate",
+        with patch("app.cloud_quote", return_value=self.quote), patch("pipeline.cloud.CloudBatch.text", request), patch(
+            "pipeline.cloud.CloudBatch.close"
+        ) as close_batch, patch("pipeline.fit.review_candidate",
             side_effect=lambda model, item, *args: dict(item, editorial_status="estimated", context_preserved=True, standalone=True)), patch(
                 "app.prepare_narration", return_value=45), patch("app.prepare_media"), patch(
                 "app.preview_package_storyboard", side_effect=lambda current, *args, **kwargs:
@@ -119,7 +141,10 @@ class CloudWorkflowTests(unittest.TestCase):
         self.assertEqual(final[3], current["approved"][0]["title"])
         self.assertEqual(len(final), len(outputs[0]))
         request.assert_called_once()
-        batch.close.assert_called_once()
+        close_batch.assert_called_once()
+        self.assertTrue((self.root / "cloud" / current["cloud_batch"]["batch_id"] / "requests.json").is_file())
+        self.assertEqual(current["cloud_batch"]["current_revision"], current["approval_revision"])
+        self.assertNotIn("cloud_approval", current)
 
     def setUp(self):
         from pipeline.cloud import CAPS
@@ -133,14 +158,24 @@ class CloudWorkflowTests(unittest.TestCase):
             fixture.start()
             self.addCleanup(fixture.stop)
 
-    def batch(self, consent=True):
+    def batch(self):
         from pipeline.cloud import CloudBatch
-        return CloudBatch(self.root, self.quote, consent=consent, scope="selection")
+        return CloudBatch(self.root, self.quote, scope="selection")
 
-    def test_missing_consent_has_no_ledger_or_client(self):
-        with self.assertRaisesRegex(ValueError, "Approve"):
-            self.batch(False)
-        self.assertFalse((self.root / "requests.json").exists())
+    def test_batch_needs_no_consent_and_does_not_submit_on_creation(self):
+        batch = self.batch()
+        self.assertEqual(batch._load()["requests"], {})
+        self.assertIsNone(batch._client)
+        self.assertIsNone(batch._portkey_client)
+        batch.close()
+
+    def test_ui_retains_preview_approval_but_has_no_cost_consent(self):
+        with app.build_app() as demo:
+            config = demo.get_config_file()
+        checkboxes = [item["props"].get("label", "") for item in config["components"] if item["type"] == "checkbox"]
+        self.assertFalse(any("cost" in label.lower() or "cloud" in label.lower() for label in checkboxes))
+        self.assertFalse(hasattr(app, "approve_cloud_budget"))
+        self.assertTrue(any("review" in label.lower() or "watch" in label.lower() for label in checkboxes))
 
     def test_completed_text_is_reused_and_tampering_blocks_regeneration(self):
         batch = self.batch()
@@ -254,10 +289,9 @@ class CloudWorkflowTests(unittest.TestCase):
         self.assertFalse((self.root / "requests.json").exists())
 
     def local_batch(self):
-        for kind in ("image", "video", "music"):
+        for kind in ("image", "music"):
             self.quote["items"][kind]["provider"] = "local-illustration"
         self.quote["items"]["text"]["provider"] = "portkey"
-        self.quote["items"]["video"]["model"] = "local-ffmpeg-zoompan"
         with patch.dict("os.environ", {"XERO_PORTKEY_API_KEY": "test-only", "GEMINI_API_KEY": ""}):
             batch = self.batch()
         self.addCleanup(batch.close)
@@ -286,7 +320,6 @@ class CloudWorkflowTests(unittest.TestCase):
         image = batch.asset("image", "Brief", "16:9")
         self.assertEqual(batch.asset("image", "Brief", "16:9"), image)
         music = batch.asset("music", "Soft loop")
-        broll = batch.local_broll(image, "16:9")
         self.assertEqual(create.call_count, 2)
         self.assertIsNone(batch._client)
         arguments = create.call_args_list[0].kwargs
@@ -297,9 +330,7 @@ class CloudWorkflowTests(unittest.TestCase):
         with Image.open(image["path"]) as picture:
             self.assertEqual(picture.size, (1280, 720))
         self.assertTrue(music["path"].endswith(".wav"))
-        self.assertTrue(broll["path"].endswith(".mp4"))
-        from pipeline.utils import media_duration
-        self.assertAlmostEqual(media_duration(broll["path"]), 4, delta=0.2)
+        self.assertNotIn("video", {item["kind"] for item in json.loads(batch.path.read_text())["requests"].values()})
 
     def test_local_illustration_invalid_model_data_fails_once_without_resubmission(self):
         batch = self.local_batch()
@@ -321,11 +352,43 @@ class CloudWorkflowTests(unittest.TestCase):
         request = next(iter(json.loads(batch.path.read_text())["requests"].values()))
         self.assertEqual(request["error_type"], "ValueError")
 
-    def test_local_video_cannot_be_requested_as_generated_asset(self):
-        batch = self.local_batch()
-        with self.assertRaisesRegex(ValueError, "derived from an approved still"):
-            batch.asset("video", "Brief")
+    def test_video_cannot_be_requested_as_generated_asset(self):
+        batch = self.batch()
+        for provider in ("google", "local-illustration"):
+            with self.subTest(provider=provider):
+                batch.quote["items"]["image"]["provider"] = provider
+                with self.assertRaisesRegex(ValueError, "Unsupported asset kind"):
+                    batch.asset("video", "Brief")
+        self.assertIsNone(batch._client)
+        self.assertIsNone(batch._portkey_client)
         self.assertEqual(json.loads(batch.path.read_text())["requests"], {})
+
+    def test_prepare_media_only_requests_card_images_and_optional_music(self):
+        from pipeline.media import prepare_media
+        clips = [{"id": "c1", "start": 0, "end": 15, "title": "Check assumptions",
+                  "takeaway": "Check assumptions.", "excerpt": "Check assumptions."}]
+        for audience in AUDIENCE_PROFILES:
+            for generated_music in (False, True):
+                with self.subTest(audience=audience, generated_music=generated_music):
+                    draft = draft_storyboard(clips, audience)
+                    batch = Mock()
+                    batch.quote = {"items": {"music": {}} if generated_music else {}}
+                    batch.asset.side_effect = lambda kind, *args: {"kind": kind}
+                    with patch("pipeline.media.verify_media"), patch("pipeline.music.library_asset", return_value={"kind": "music"}), patch.dict(
+                        "os.environ", {"LOCAL_SFX_MANIFEST": ""}
+                    ):
+                        prepare_media(draft, batch, "16:9")
+                    self.assertEqual(set(draft["media_assets"]), {"opening", "ending", "music"})
+                    self.assertEqual([call.args[0] for call in batch.asset.call_args_list],
+                                     ["image", "image"] + (["music"] if generated_music else []))
+                    batch.local_broll.assert_not_called()
+                    self.assertEqual(draft["creative_version"], "2.0")
+
+    def test_legacy_broll_requires_regeneration_before_render_or_export(self):
+        from pipeline.media import verify_media
+        for assets in ({"broll": {}}, {"legacy": {"kind": "video"}}):
+            with self.subTest(assets=assets), self.assertRaisesRegex(ValueError, "Regenerate and approve"):
+                verify_media({"media_assets": assets})
 
     def test_missing_google_media_key_does_not_consume_request_cap(self):
         self.quote["items"]["text"]["provider"] = "portkey"
@@ -485,25 +548,23 @@ class StoryboardTests(unittest.TestCase):
         self.assertEqual(set(app.AUDIENCE_GOALS), set(AUDIENCE_PROFILES))
         with tempfile.TemporaryDirectory() as directory:
             for audience, profile in AUDIENCE_PROFILES.items():
-                self.assertTrue(_is_neural_voice(profile["voice"]), audience)
-                with self.subTest(audience=audience), patch("edge_tts.Communicate") as communicate, patch(
+                self.assertEqual(profile["provider"], "kokoro")
+                with self.subTest(audience=audience), patch("pipeline.kokoro_tts.synthesize") as synth, patch(
                     "pipeline.assemble.run_cmd"
-                ) as command, patch("pipeline.assemble.shutil.which", return_value="/usr/bin/ffmpeg") as local_speech:
-                    communicate.return_value.save_sync.side_effect = lambda path: Path(path).write_bytes(b"test audio")
+                ) as command:
                     draft = draft_storyboard(self.clips(), audience)
                     self.assertEqual(draft["narration_profile"], profile)
                     dest = Path(directory) / "speech.aiff"
-                    _synthesize_title("Check an example.", dest, voice=profile["voice"], rate=profile["rate"])
-                    communicate.assert_called_once_with("Check an example.", voice=profile["voice"],
-                                                        rate=_edge_rate(profile["rate"]),
-                                                        connect_timeout=5, receive_timeout=30)
-                    self.assertEqual(command.call_args.args[0][-3:], ["-c:a", "pcm_s16be", str(dest)])
-                    self.assertEqual(dest.with_suffix(".txt").read_text(), "Check an example.")
-                    self.assertNotIn(("say",), [lookup.args for lookup in local_speech.call_args_list])
+                    _synthesize_title("Check an example.", dest, voice=profile["voice"], rate=profile["rate"],
+                                      speed=profile["speed"], pitch_semitones=profile["pitch_semitones"])
+                    synth.assert_called_once_with("Check an example.", dest, voice=profile["voice"],
+                                                  speed=profile["speed"], pitch_semitones=profile["pitch_semitones"],
+                                                  ffmpeg=unittest.mock.ANY)
+                    command.assert_not_called()
                     original = storyboard_revision("selection", draft)
                     draft["ending"]["narration"] = False
                     self.assertNotEqual(original, storyboard_revision("selection", draft))
-        self.assertLess(AUDIENCE_PROFILES["Kids"]["rate"], AUDIENCE_PROFILES["Researcher"]["rate"])
+        self.assertEqual(AUDIENCE_PROFILES["Kids"]["pitch_semitones"], 2)
 
     def test_legacy_say_voices_still_reach_local_speech(self):
         """Retired audience profiles keep their macOS voice so old drafts still render."""
@@ -512,7 +573,7 @@ class StoryboardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             for audience in ("Students", "Professionals"):
                 profile = LEGACY_AUDIENCE_PROFILES[audience]
-                self.assertFalse(_is_neural_voice(profile["voice"]))
+                self.assertIn(profile["voice"], ("Samantha", "Daniel"))
                 with self.subTest(audience=audience), patch("pipeline.assemble.shutil.which",
                                                             return_value="/usr/bin/say"), patch(
                     "pipeline.assemble.run_cmd"
@@ -525,56 +586,91 @@ class StoryboardTests(unittest.TestCase):
     def test_unavailable_speech_fails_explicitly(self):
         with patch("pipeline.assemble.shutil.which", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "macOS speech"):
-                _synthesize_title("Example", Path("unused.aiff"))
+                _synthesize_title("Example", Path("unused.aiff"), voice="Samantha")
 
-    def test_kids_automatically_use_ana_and_reject_old_overrides(self):
+    def test_kids_automatically_use_kokoro_and_reject_old_overrides(self):
         draft = draft_storyboard(self.clips(), "Kids")
-        self.assertEqual(draft["narration_profile"]["voice"], "en-US-AnaNeural")
-        self.assertEqual(draft["narration_profile"]["rate"], 140)
+        self.assertEqual(draft["narration_profile"]["voice"], "af_sky")
+        self.assertEqual(draft["narration_profile"]["speed"], 0.98)
         validate_storyboard(draft, self.clips())
         draft["narration_voice"] = "Karen"
         with self.assertRaisesRegex(ValueError, "Manual voice overrides"):
             validate_storyboard(draft, self.clips())
         draft.pop("narration_voice")
-        for old_voice in ("Kevin", "Junior", "Samantha", "en-US-AvaNeural"):
+        for old_voice in ("Kevin", "Junior", "Samantha", "en-US-AvaNeural", "en-US-AnaNeural"):
             draft["narration_profile"]["voice"] = old_voice
             with self.assertRaisesRegex(ValueError, "Narration profile changed"):
                 validate_storyboard(draft, self.clips())
 
-    def test_ana_uses_child_voice_and_passes_plain_text(self):
-        with tempfile.TemporaryDirectory() as directory, patch("edge_tts.Communicate") as communicate, patch(
-            "pipeline.assemble.run_cmd"
-        ) as command, patch("pipeline.assemble.shutil.which", return_value="/usr/bin/ffmpeg") as local_speech:
-            communicate.return_value.save_sync.side_effect = lambda path: Path(path).write_bytes(b"test audio")
+    def test_kokoro_passes_plain_text_and_explicit_settings_to_worker(self):
+        def worker(command, **kwargs):
+            job = json.loads(kwargs["input"])
+            Path(job["destination"]).write_bytes(b"test audio")
+
+        with tempfile.TemporaryDirectory() as directory, patch("pipeline.kokoro_tts.Path.is_file", return_value=True), patch(
+            "pipeline.kokoro_tts.subprocess.run", side_effect=worker
+        ) as command:
             dest = Path(directory) / "child.aiff"
             text = "Why is 1 < 2 & what comes next?"
             profile = draft_storyboard(self.clips(), "Kids")["narration_profile"]
-            self.assertEqual(_synthesize_title(text, dest, voice=profile["voice"], rate=profile["rate"]), dest)
-            communicate.assert_called_once_with(text, voice="en-US-AnaNeural", rate="-20%",
-                                                connect_timeout=5, receive_timeout=30)
+            self.assertEqual(_synthesize_title(text, dest, voice=profile["voice"], rate=profile["rate"],
+                                              speed=profile["speed"], pitch_semitones=profile["pitch_semitones"]), dest)
+            job = json.loads(command.call_args.kwargs["input"])
+            self.assertEqual((job["text"], job["voice"], job["speed"], job["pitch_semitones"]),
+                             (text, "af_sky", 0.98, 2))
             self.assertEqual(dest.with_suffix(".txt").read_text(), text)
-            self.assertEqual(command.call_args.args[0][-3:], ["-c:a", "pcm_s16be", str(dest)])
-            self.assertFalse(list(Path(directory).glob("*.mp3")))
-            self.assertNotIn(("say",), [lookup.args for lookup in local_speech.call_args_list])
+            self.assertEqual(dest.read_bytes(), b"test audio")
+            self.assertEqual(command.call_args.kwargs["timeout"], 180)
 
-    def test_ana_empty_audio_never_falls_back(self):
-        with tempfile.TemporaryDirectory() as directory, patch("edge_tts.Communicate"), patch(
+    def test_kokoro_missing_environment_never_falls_back(self):
+        with patch("pipeline.kokoro_tts.Path.is_file", return_value=False), patch(
             "pipeline.assemble.run_cmd"
         ) as command:
-            with self.assertRaisesRegex(RuntimeError, "empty audio"):
-                _synthesize_title("Example", Path(directory) / "unused.aiff", voice="en-US-AnaNeural", rate=140)
-            self.assertFalse(list(Path(directory).glob("*.mp3")))
+            with self.assertRaisesRegex(RuntimeError, "Local Kokoro is not installed"):
+                _synthesize_title("Example", Path("unused.aiff"))
             command.assert_not_called()
 
-    def test_ana_service_failure_never_falls_back(self):
-        with tempfile.TemporaryDirectory() as directory, patch("edge_tts.Communicate") as communicate, patch(
-            "pipeline.assemble.run_cmd"
-        ) as command:
-            communicate.return_value.save_sync.side_effect = TimeoutError("Timed out")
+    def test_kokoro_worker_failure_preserves_existing_audio(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory, patch("pipeline.kokoro_tts.Path.is_file", return_value=True), patch(
+            "pipeline.kokoro_tts.subprocess.run", side_effect=subprocess.TimeoutExpired("kokoro", 180)
+        ):
+            destination = Path(directory) / "speech.aiff"
+            destination.write_bytes(b"existing")
             with self.assertRaisesRegex(RuntimeError, "No fallback voice was used"):
-                _synthesize_title("Example", Path(directory) / "unused.aiff", voice="en-US-AnaNeural", rate=140)
-            self.assertFalse(list(Path(directory).glob("*.mp3")))
+                _synthesize_title("Example", destination)
+            self.assertEqual(destination.read_bytes(), b"existing")
+
+    def test_retired_edge_voice_requires_regeneration(self):
+        with patch("pipeline.assemble.run_cmd") as command:
+            with self.assertRaisesRegex(RuntimeError, "Regenerate the storyboard"):
+                _synthesize_title("Example", Path("unused.aiff"), voice="en-US-AnaNeural")
             command.assert_not_called()
+
+    def test_kokoro_cache_tracks_processing_and_blocks_old_approval(self):
+        from pipeline.assemble import narration_audio
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "pipeline.assemble._synthesize_title", side_effect=lambda text, path, **kwargs: path.write_bytes(b"audio")
+        ) as synth, patch("pipeline.assemble.media_duration", return_value=2):
+            root = Path(directory)
+            profile = AUDIENCE_PROFILES["Kids"]
+            original = narration_audio("Example", root / "one.aiff", profile, root / "cache")
+            approved = {original["cache_key"]: original["sha256"]}
+            keys = {original["cache_key"]}
+            for field, value in (("speed", 0.9), ("pitch_semitones", 4), ("voice", "af_heart")):
+                changed = {**profile, field: value}
+                with self.assertRaisesRegex(ValueError, "Approved narration"):
+                    narration_audio("Example", root / "two.aiff", changed, root / "cache", approved)
+                asset = narration_audio("Example", root / "two.aiff", changed, root / "cache")
+                keys.add(asset["cache_key"])
+            with patch("pipeline.kokoro_tts.RENDER_VERSION", "new-renderer"):
+                asset = narration_audio("Example", root / "two.aiff", profile, root / "cache")
+                keys.add(asset["cache_key"])
+            self.assertEqual(len(keys), 5)
+            self.assertEqual(synth.call_count, 5)
+            with self.assertRaisesRegex(ValueError, "requires its cache"):
+                narration_audio("Example", root / "two.aiff", profile, approved_assets=approved)
+            self.assertEqual(synth.call_count, 5)
 
     def test_legacy_storyboard_and_profile_validation(self):
         draft = draft_storyboard(self.clips(), "General public")
@@ -595,7 +691,7 @@ class StoryboardTests(unittest.TestCase):
         previous = copy.deepcopy(generated)
         regenerated = app.draft_package_storyboard(state, "Original", generated=generated)[0]
         self.assertEqual(generated, previous)
-        self.assertEqual(regenerated["storyboard_draft"]["narration_profile"]["voice"], "en-US-AnaNeural")
+        self.assertEqual(regenerated["storyboard_draft"]["narration_profile"]["voice"], "af_sky")
         self.assertNotIn("narration_voice", regenerated)
         self.assertNotIn("narration_voice", regenerated["storyboard_draft"])
         self.assertIsNone(regenerated["storyboard_preview_revision"])
@@ -1473,9 +1569,26 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(report["publication_status"], "not_assessed")
         self.assertEqual(report["counts"]["unavailable"], 0)
         self.assertEqual(report["selection_context"]["target_audience"], "Kids")
+        speed = next(item for item in report["metrics"] if item["id"] == "caption_speed")
+        self.assertEqual(speed["value"]["limit_characters_per_second"], 17)
         self.assertEqual(next(item for item in report["metrics"] if item["id"] == "loudness")["value"], -18)
         self.assertNotIn("reviewer", report)
         self.assertNotIn("overall_score", report)
+
+    def test_caption_policy_uses_saved_export_audience(self):
+        from pipeline.assess import measure_export
+
+        with tempfile.TemporaryDirectory() as directory, patch("pipeline.assess.run_cmd", side_effect=self.objective_command):
+            root = Path(directory)
+            selection = self.objective_export(root)
+            (root / "captions.srt").write_text("1\n00:00:01,000 --> 00:00:02,000\n123456789012345678\n")
+            for audience in ("Kids", "Researcher", "General public", None):
+                with self.subTest(audience=audience):
+                    selection["selection_context"] = {"target_audience": audience}
+                    (root / "selection.json").write_text(json.dumps(selection))
+                    report = measure_export(root)
+                    speed = next(item for item in report["metrics"] if item["id"] == "caption_speed")
+                    self.assertEqual(speed["status"], "fail" if audience in ("Kids", None) else "pass")
 
     def test_objective_assessment_reports_missing_audio_and_inconsistent_timeline(self):
         from pipeline.assess import measure_export, _timeline_metrics
@@ -1565,6 +1678,52 @@ class AssessmentTests(unittest.TestCase):
         self.assertEqual(outcomes["caption_speed"], "fail")
         self.assertEqual(_caption_metrics("not SRT", 45)[0][0]["status"], "fail")
         self.assertEqual(_caption_metrics("", 45)[0][0]["status"], "fail")
+
+    def test_caption_speed_uses_audience_boundaries_and_conservative_fallback(self):
+        from pipeline.assess import _caption_metrics
+
+        for audience, limit in (("Kids", 17), ("Researcher", 20), ("General public", 20),
+                                (None, 17), ("Legacy audience", 17)):
+            for length in (limit, limit + 1):
+                with self.subTest(audience=audience, length=length):
+                    captions = f"1\n00:00:01,000 --> 00:00:02,000\n{'A' * length}\n"
+                    metrics, _ = _caption_metrics(captions, 45, audience)
+                    speed = next(item for item in metrics if item["id"] == "caption_speed")
+                    self.assertEqual(speed["status"], "pass" if length == limit else "fail")
+                    self.assertEqual(speed["value"]["limit_characters_per_second"], limit)
+                    self.assertEqual(speed["value"]["cues_above_limit"], int(length > limit))
+                    if audience in (None, "Legacy audience"):
+                        self.assertIn("conservative fallback", speed["threshold"])
+
+    def test_caption_speed_counts_normalized_spaces_and_punctuation(self):
+        from pipeline.assess import _caption_metrics, _friendly_value
+
+        captions = "1\n00:00:01,000 --> 00:00:01,990\nA   short\ncaption!\n"
+        metrics, _ = _caption_metrics(captions, 45, "Kids")
+        speed = next(item for item in metrics if item["id"] == "caption_speed")
+        self.assertEqual(speed["value"]["max_characters_per_second"], 16.16)
+        self.assertEqual(speed["value"]["fastest_cue_text"], "A short caption!")
+        metrics, _ = _caption_metrics(captions.replace("01,990", "01,940"), 45, "Kids")
+        speed = next(item for item in metrics if item["id"] == "caption_speed")
+        self.assertEqual(speed["status"], "fail")
+        self.assertIn("17.02 characters/second", _friendly_value(speed))
+        self.assertIn('Worst: "A short caption!"', _friendly_value(speed))
+
+    def test_objective_cache_is_invalidated_when_metric_version_changes(self):
+        from pipeline.assess import assess_export_automatically, measure_export
+
+        with tempfile.TemporaryDirectory() as directory, patch("pipeline.assess.run_cmd", side_effect=self.objective_command), patch(
+            "pipeline.assess.measure_export", wraps=measure_export
+        ) as measure:
+            root = Path(directory)
+            self.objective_export(root)
+            hashes = artifact_hashes(root)
+            with patch("pipeline.assess.OBJECTIVE_VERSION", "2.1"):
+                old_report = assess_export_automatically(root)
+            new_report = assess_export_automatically(root)
+            self.assertNotEqual(old_report, new_report)
+            self.assertEqual(measure.call_count, 2)
+            self.assertEqual(artifact_hashes(root), hashes)
 
     def test_objective_html_puts_failures_first_and_escapes_text(self):
         from pipeline.assess import objective_html

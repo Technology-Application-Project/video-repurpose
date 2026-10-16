@@ -87,10 +87,9 @@ class MixTests(unittest.TestCase):
     def mix_command(self, provider):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("music.mp3", "broll.mp4", "source.mp4"):
+            for name in ("music.mp3", "source.mp4"):
                 (root / name).write_bytes(b"x")
-            draft = {"media_assets": {"music": {"path": str(root / "music.mp3"), "kind": "music", **({"provider": provider} if provider else {})},
-                                      "broll": {"path": str(root / "broll.mp4"), "kind": "video"}},
+            draft = {"media_assets": {"music": {"path": str(root / "music.mp3"), "kind": "music", **({"provider": provider} if provider else {})}},
                      "music_gain": 0.3, "duration_budget": {"min_seconds": 30, "max_seconds": 60}}
             timeline = [{"kind": "clip", "start": 0, "duration": 10}]
             with patch("pipeline.media.verify_media"), patch("pipeline.media.media_duration", return_value=10.0), patch(
@@ -102,6 +101,13 @@ class MixTests(unittest.TestCase):
         self.assertNotIn("afade=t=in", self.mix_command("library"))
         self.assertIn("afade=t=in", self.mix_command(None))
         self.assertIn(f"{CARD_MUSIC_BOOST - 1}", self.mix_command("library"))
+
+    def test_audio_mix_copies_video_without_overlay_inputs(self):
+        command = self.mix_command("library")
+        self.assertIn("-map 0:v:0", command)
+        self.assertIn("-c:v copy", command)
+        self.assertNotIn("overlay", command)
+        self.assertNotIn("broll", command)
 
 
 class PrepareMediaTests(unittest.TestCase):
@@ -116,10 +122,10 @@ class PrepareMediaTests(unittest.TestCase):
             from pipeline.project import file_hash
             return {"path": str(path), "sha256": file_hash(path), "kind": kind}
 
-        items = {"video": {"provider": "local-illustration"}, "image": {}}
+        items = {"image": {}}
         if with_music_item:
             items["music"] = {}
-        return Mock(quote={"items": items}, asset=Mock(side_effect=asset), local_broll=Mock(side_effect=lambda still, aspect: asset("video", "b")))
+        return Mock(quote={"items": items}, asset=Mock(side_effect=asset))
 
     def test_library_music_replaces_the_paid_music_request(self):
         for audience in music.AUDIENCES:
