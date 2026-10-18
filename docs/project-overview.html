@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Current architecture of the Educational Short Clip Demo: audience-aware selection, cloud storyboards, local Kokoro narration, reviewed exports and automatic assessment.">
-<title>Educational Short Clip Demo | Project Overview</title>
+<meta name="description" content="Current architecture of Brevio Studio: audience-aware selection, cloud storyboards, local Kokoro narration, reviewed exports and automatic assessment.">
+<title>Brevio Studio | Project Overview</title>
 <style>
  :root{--ink:#202d28;--muted:#556760;--green:#145f4c;--gold:#d7ac40;--line:#d5dfda}
  *{box-sizing:border-box;letter-spacing:0}html{scroll-behavior:smooth}body{margin:0;background:#f7f9f8;color:var(--ink);font:16px/1.65 "Avenir Next","Segoe UI",sans-serif}
@@ -26,7 +26,7 @@
 <body>
 <header><div class="wrap">
  <div class="eyebrow">Project brief / Hybrid AI + local media / 16 October 2026</div>
- <h1>Educational Short Clip Demo</h1>
+ <h1>Brevio Studio</h1>
  <p class="lede">Turn a lecture into a 30-60 second compilation for researchers, the general public or children, with automatically selected excerpts, local narration, captions and evidence-backed human review.</p>
  <nav aria-label="Sections"><a href="#workflow">Workflow</a><a href="#stack">Tech stack</a><a href="#media">Image &amp; video</a><a href="#features">Features</a><a href="#outputs">Outputs</a><a href="#review">Assessment &amp; limits</a><a href="#run">Run locally</a></nav>
 </div></header>
@@ -34,7 +34,7 @@
  <div class="facts" aria-label="Project at a glance"><div><strong>Up to 3 clips</strong><span>Automatic selection; manual path allows 1-5</span></div><div><strong>30-60 sec</strong><span>Measured compilation duration</span></div><div><strong>3 audiences</strong><span>Researcher, General public, Kids (8-12)</span></div><div><strong>Local speech</strong><span>Kokoro; cloud text uses capped batches</span></div></div>
  <section id="workflow">
   <h2><span>01</span>From lecture to reviewed short</h2>
-  <p class="muted">Gradio coordinates local transcription, nomination and automatic clip selection. Generation starts directly with the configured provider and request limits, without a separate cost-approval step. A human still reviews and approves the storyboard preview before export. Manual clip review remains available; automatic selection is not human approval.</p>
+  <p class="muted">The studio coordinates local transcription, nomination and automatic clip selection. Generation starts directly with the configured provider and request limits, without a separate cost-approval step. A human still reviews and approves the storyboard preview before export. Manual clip review remains available; automatic selection is not human approval.</p>
   <figure><div class="diagram" tabindex="0" role="region" aria-label="Workflow diagram, horizontally scrollable on small screens">
    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 350" role="img" aria-labelledby="diagram-title diagram-desc">
     <title id="diagram-title">Lecture processing and review workflow</title><desc id="diagram-desc">Upload, transcribe, nominate and automatically select clips, automatically configure a cloud batch, generate a storyboard and local narrated preview, approve the preview, export, and assess the final compilation.</desc>
@@ -68,7 +68,7 @@
  <section id="stack">
   <h2><span>02</span>Technology stack</h2>
   <div class="table-scroll" tabindex="0" role="region" aria-label="Technology stack table"><table><thead><tr><th scope="col">Layer</th><th scope="col">Technology</th><th scope="col">Responsibility</th></tr></thead><tbody>
-  <tr><td>Application</td><td>Python / Gradio</td><td>Five-tab UI, queued callbacks, session state and workflow validation. The current app runtime is Python 3.13; Kokoro uses a separate Python 3.12 environment.</td></tr>
+  <tr><td>Application</td><td>Python / FastAPI + React</td><td>Four-stage studio, durable jobs, saved run checkpoints and workflow validation. The current app runtime is Python 3.13; Kokoro uses a separate Python 3.12 environment.</td></tr>
    <tr><td>Speech recognition</td><td>WhisperX / PyTorch</td><td>Local transcription with the small ASR model and word alignment when available; segment timing is the fallback.</td></tr>
   <tr><td>Local language intelligence</td><td>Ollama / Qwen2.5 default</td><td>Source-grounded concepts, clip nomination and editorial estimates. Deterministic rules rank, filter overlaps and choose a duration-bounded subset.</td></tr>
   <tr><td>Creative text</td><td>Gemini via Portkey</td><td>Evidence-linked opening, bridges, synthesis and CTA from fitted excerpts. Generation sends prompts and selected excerpts to the configured gateway without a separate cost confirmation; each batch records its configuration and request limits.</td></tr>
@@ -96,7 +96,7 @@
   <tr><td>Google-direct images</td><td>A configured image-capable model returns image bytes through the Google Gen AI SDK.</td><td>Optional adapter, not active in the latest runs. Requires explicit <code>media_provider: google</code>, an accessible image model, credentials, quota and valid pricing configuration.</td></tr>
   </tbody></table></div>
   <p class="muted">Ownership: <a href="../pipeline/media.py">media.py</a> builds evidence-linked briefs and mixes audio; <a href="../pipeline/cloud.py">cloud.py</a> handles text/image/music requests, configuration, caching and the ledger; <a href="../pipeline/illustration.py">illustration.py</a> validates scene data and renders local assets; <a href="../pipeline/cards.py">cards.py</a> lays out the narrated cards.</p>
-  <div class="notice"><p><strong>Controls and provenance:</strong> each batch allows at most four text requests, two image requests and one music request only when generated music is selected. Video requests are unsupported. Cached assets are reused and SHA-256 hashes are checked before rendering and export. Old drafts containing B-roll require regeneration and fresh preview approval; existing exports and assessment records are unchanged. Each generation reads current provider settings and creates a new batch; estimates are informational, not a consent gate. Card artwork is labelled conceptual illustration, not source evidence; a 1080p export does not make the 720p artwork native 1080p.</p></div>
+  <div class="notice"><p><strong>Controls and provenance:</strong> each batch allows at most five text requests (one is the pre-generation blueprint), two image requests and one music request only when generated music is selected. Video requests are unsupported. Cached assets are reused and SHA-256 hashes are checked before rendering and export. Old drafts containing B-roll require regeneration and fresh preview approval; existing exports and assessment records are unchanged. Each generation reads current provider settings and creates a new batch; estimates are informational, not a consent gate. Card artwork is labelled conceptual illustration, not source evidence; a 1080p export does not make the 720p artwork native 1080p.</p></div>
  </section>
  <section id="features">
   <h2><span>04</span>Implemented features</h2>
@@ -131,12 +131,12 @@ uv pip install --python work/kokoro-runtime/.venv/bin/python \
   -r requirements-kokoro.txt
 work/kokoro-runtime/.venv/bin/python pipeline/kokoro_tts.py --prepare
 
-python app.py</code></pre><p>The preparation step downloads the English model, Kokoro weights and voice packs once. Normal synthesis is offline. <code>KOKORO_PYTHON</code> and <code>KOKORO_MODEL_CACHE</code> can override the default runtime and cache paths.</p><p>Configure the cloud provider and reviewed pricing using the <a href="../README.md#cloud-setup-and-spending">setup guide</a> before generating a storyboard. Credentials belong in the private environment or ignored <code>.env</code>, never in source or exported artifacts. Local-illustration mode still makes paid cloud text calls; generation starts without a separate cost confirmation.</p></div>
+./start.command</code></pre><p>The preparation step downloads the English model, Kokoro weights and voice packs once. Normal synthesis is offline. <code>KOKORO_PYTHON</code> and <code>KOKORO_MODEL_CACHE</code> can override the default runtime and cache paths.</p><p>Configure the cloud provider and reviewed pricing using the <a href="../README.md#cloud-setup-and-spending">setup guide</a> before generating a storyboard. Credentials belong in the private environment or ignored <code>.env</code>, never in source or exported artifacts. Local-illustration mode still makes paid cloud text calls; generation starts without a separate cost confirmation.</p></div>
   <div><h3>Regression coverage</h3><p>Unit tests use controlled model responses. Media tests exercise encoding, narration and timing; they are not editorial certification.</p><pre><code>python -m unittest discover -s tests -q
 
 RUN_MEDIA_TESTS=1 python -m unittest discover -s tests -q</code></pre></div>
  </div></section>
 </main>
-<footer class="wrap"><p>Educational Short Clip Demo / Proof of concept / Implementation snapshot: 16 October 2026 / Audience profiles 4.0 / Card renderer 2.0</p><a href="../README.md">Project README</a><a href="post-generation-rubric.md">Assessment rubric</a><a href="../requirements.txt">App dependencies</a><a href="../requirements-kokoro.txt">Kokoro dependencies</a></footer>
+<footer class="wrap"><p>Brevio Studio / Proof of concept / Implementation snapshot: 16 October 2026 / Audience profiles 4.0 / Card renderer 2.0</p><a href="../README.md">Project README</a><a href="post-generation-rubric.md">Assessment rubric</a><a href="../requirements.txt">App dependencies</a><a href="../requirements-kokoro.txt">Kokoro dependencies</a></footer>
 </body>
 </html>

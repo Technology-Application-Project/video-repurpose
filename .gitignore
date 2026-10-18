@@ -1,6 +1,7 @@
 # Run artifacts (large videos; do not commit)
 work/
 exports/
+tests/
 
 # Media / archives if created outside those folders
 *.mp4
@@ -17,7 +18,6 @@ venv/
 .env.*
 
 # App / OS
-.gradio/
 .DS_Store
 *.egg-info/
 .pytest_cache/

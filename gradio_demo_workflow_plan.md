@@ -1,4 +1,4 @@
-# Educational Short Clip Demo — Workflow Plan
+# Brevio Studio — Workflow Plan
 
 Simple end-to-end plan for a Gradio demo app.  
 Goal: turn a long educational video into 3–5 short, on-topic clips for social platforms.

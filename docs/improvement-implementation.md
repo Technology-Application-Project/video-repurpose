@@ -40,7 +40,7 @@ This is not an engagement score. Audience/profile versions, lecture concepts and
 duration settings are retained in export metadata. Rubric 1.1 judges learning value
 against that exported audience; legacy exports remain audience unknown.
 
-A [post-generation rubric](post-generation-rubric.md), available in Gradio tab 5
+A [post-generation rubric](post-generation-rubric.md), available in the Export tab's technical check
 and through the CLI, now calculates
 weighted scores from evidence-backed reviewer ratings. Reports are versioned and
 bound to hashes of the final video, captions, post and selection. Missing dimensions

@@ -194,8 +194,8 @@ and ZIP are untouched. Assessment reports are not inserted into the original ZIP
 SHA-256 hashes bind the review to the video, caption sidecar, post and selection.
 Missing or changed hashes reject the review. If any of these files changes, create
 a new template and reassess; a previously saved report does not approve new content.
-These legacy commands retain editorial scoring and artifact validation. The Gradio
-tab uses the automatic metrics described above instead.
+These legacy commands retain editorial scoring and artifact validation. The Export tab's
+technical check uses the automatic metrics described above instead.
 
 ## Candidate Scores Are Separate
 

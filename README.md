@@ -1,13 +1,15 @@
-# Educational Short Clip Demo
+# Brevio Studio
 
-Gradio app that turns a long lecture video into a short compilation: transcribe → source-grounded concepts → audience-aware nomination and editorial scoring → automatic (or human) clip selection → ffmpeg assemble with captions.
+Local React editing studio that turns a long lecture video into a short compilation: transcribe → source-grounded concepts → audience-aware nomination and editorial scoring → automatic (or human) clip selection → ffmpeg assemble with captions.
 
 Illustrated HTML: [`docs/pipeline.html`](docs/pipeline.html) (Mermaid + SVG). Four-week plan: [`docs/four-week-plan.md`](docs/four-week-plan.md). Code walkthrough: [`pipeline/README.md`](pipeline/README.md). Product spec: [`gradio_demo_workflow_plan.md`](gradio_demo_workflow_plan.md).
 
 ## What is in this repo
 
 ```text
-app.py                      Gradio UI
+app.py                      shared workflow callbacks used by the API (legacy UI removed)
+api/                        local FastAPI service, durable jobs and export catalog
+frontend/                   React + TypeScript editing studio
 pipeline/                   transcribe, nominate, rank, cut, assemble, export
 prompts/nominate_clips.txt  Ollama system prompt
 docs/                       architecture notes
@@ -33,6 +35,70 @@ WhisperX will pull PyTorch and ASR weights on first transcribe.
 
 ## Run
 
+### React Studio
+
+For everyday use on this Mac, double-click `start.command` in Finder, or run:
+
+```bash
+./start.command
+```
+
+Then open **http://127.0.0.1:8765**. Keep the terminal running; press Ctrl+C to stop.
+If the server is already running, just open the URL instead of launching it again.
+The launcher uses `/opt/anaconda3/bin/python`; set `STUDIO_PYTHON` to override it.
+
+From the repository root, with Python dependencies installed and Node 22.12+:
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run build
+python -m uvicorn api.main:create_app --factory --host 127.0.0.1 --port 8765
+```
+
+Open **http://127.0.0.1:8765**. If that port is occupied, choose another `--port`.
+One server serves both the production React build and the API. Keep it bound to
+localhost: this is a single-user local application, not an authenticated hosted service.
+Run exactly one API worker; do not use `--workers` or `--reload` during generation.
+
+- **Source:** upload a lecture or reuse an MP4 in `downloads/`; choose audience,
+  aspect and transcription options, then analyze.
+- **Clips:** inspect source evidence, choose one to five clips, edit their ranges
+  and generate a preview. Clips remain in source order.
+- **Studio:** review the actual rendered video and seek through measured sections.
+  Generated copy is read-only; regeneration creates a new cloud batch. A named
+  reviewer and attestation are required before export.
+- **Export:** download MP4, ZIP, captions and post copy; copy the output folder or
+  reveal it in Finder. Technical checks preserve failures and do not approve publication.
+
+The library includes existing exports and isolated `test-exports` folders. Test
+outputs remain labeled; opening them does not grant human approval. Restarting
+the API validates saved checkpoints and clears approval; interrupted jobs are
+never silently resubmitted. New sessions/jobs live under `work/studio/`.
+Uploads default to a 2 GiB limit, adjustable with `STUDIO_MAX_UPLOAD_BYTES`.
+Private provider configuration remains server-side in `.env`; never use `VITE_`
+variables for secrets. Startup, navigation and library reads make no paid calls.
+
+For frontend development, keep the API on port 8765 and run
+`npm --prefix frontend run dev` in another terminal. Vite serves
+http://127.0.0.1:5173 and proxies `/api` to the backend.
+
+Verification (browser tests require the running API plus one local source/export):
+
+```bash
+npm --prefix frontend run build
+npm --prefix frontend run lint
+frontend/node_modules/.bin/playwright install chromium
+frontend/node_modules/.bin/playwright test --config frontend/playwright.config.ts
+PYTHONPATH=tests:. python -m unittest test_api -q
+```
+
+Browser tests use real saved media, but intercept **all mutations** in workflow
+tests: no paid generation, new production export or human approval is performed.
+Screenshots are written under `work/studio-browser-tests/`.
+`pipeline/workflow.py` adapts the shared callbacks in `app.py`; it preserves
+their validation and provider behavior rather than duplicating the pipeline.
+The former Gradio interface has been removed; `app.py` is no longer a launchable app.
+
 ### Cloud setup and spending
 
 Enter your key after `GEMINI_API_KEY=` in the project-root `.env` file. The app loads
@@ -43,7 +109,7 @@ in the launch terminal to use the file instead of an old exported key.
 
 The local `.env` file is Git-ignored and should have owner-only permissions
 (`chmod 600 .env`). It stores the key as plaintext, not encrypted storage. Never
-put the key in tracked source, pricing files, Gradio forms, logs or exports.
+put the key in tracked source, pricing files, forms, logs or exports.
 No paid calls are made on app startup.
 
 ### Xero Portkey Text Generation
@@ -137,14 +203,36 @@ allow selected excerpts plus up to 4096 output tokens. Consult
 [Google pricing](https://ai.google.dev/gemini-api/docs/pricing); account access and
 actual billing must be verified by the operator. Unknown pricing blocks generation.
 
-Each batch permits at most four text requests (two fitting rounds with one
-correction each), two images and, only when
+Each batch permits at most five text requests (one blueprint request, then two
+fitting rounds with one correction each), two images and, only when
 `music_source` is `generated`, one instrumental music
 request. The displayed estimate is not a billing guarantee or an approval gate.
 Clicking **Confirm clips + generate storyboard**, **Regenerate storyboard**, or
 previewing a missing/stale draft starts a new batch with the current configuration,
 selection and aspect ratio. These actions can incur provider charges without a
 separate confirmation. Loading or refreshing the estimate makes no generation request.
+Before the detailed storyboard, one text request produces a read-only **blueprint**: how
+many clips, the planned opening angle, each bridge relationship and the ending idea,
+with timing computed locally against the 30-60 second budget. It appears on the Clips
+stage while generation continues automatically and never affects approvals. A model plan
+is passed to the storyboard request as guidance (opening angle, bridge relationships and
+the ending idea, compressed to the storyboard word limits), so the Structure check's plan
+comparison shows how the plan was executed. If the request fails, a template plan is
+shown instead, is not used as guidance, and generation is not blocked. After generation it records the measured result next to the plan.
+The spoken ending call to action depends on the optional Source URL. With no URL it is
+always the fixed line "Full lecture in description."; with a URL the model suggests a
+specific call to action, which may point to the linked full lecture, and generic lines
+such as "Try it now" are still rejected.
+A Source URL is also shown on the ending card: a short form of the link (no scheme, `www`
+or query; long paths keep their last segment) appears under the call to action after the
+voice, and the corner label "Source lecture" becomes "Source: <site>" unless you edited it.
+The Export tab shows two checks per export: the **technical check** (media and caption
+metrics) and the **structure check** (section order, clip order, bridge labels, narration
+wording, evidence and duration, plus a comparison with the exported blueprint when the
+export recorded one). The structure check is computed on demand from `selection.json`.
+For a model plan it also compares key words locally (no model call): the opening, each
+bridge and the ending are marked "Follows the plan" or "Differs", and only clearly low
+overlap asks for review; the full wording sits behind "Compare the wording".
 Within a batch, completed requests are cached and hash-verified; failed or ambiguous
 requests are never blindly resubmitted. A failed generation requires an explicit
 regeneration to start another batch. No silent Ollama fallback.
@@ -161,27 +249,21 @@ license permits this use and redistribution. No effects are bundled; without thi
 manifest the mix has no sound effects. Approved media and narration stems are included
 in exports with hashes; export never generates fresh cloud assets or voices.
 
-```bash
-python app.py
-```
+Start the studio (see Launch above), then:
 
-1. Upload a local lecture mp4 and choose the target audience (16:9 is the default aspect ratio).
-2. Transcribe, then **Nominate + rank clips**. With **Choose clips automatically** ticked (the default),
-   the best-ranked clips that fit the 30-60 s budget (up to 3) are kept and confirmed for you and the
-   candidate table marks them `automatic`. The choice is recorded as automatic, with no human review,
-   in `selection.json`, the preview status and the Assessment tab. Untick it to review on tab 3.
-3. The cloud estimate loads when the page opens (missing configuration explains why generation is blocked).
-  Click **Confirm clips + generate storyboard**, with no cost approval required. To choose by hand, change a Keep box or a
-   clip time on Review first; that switches the record to manual.
-    The app fits complete ideas to 30-60 seconds, generates the storyboard with the configured text model,
-    measures narration, generates card illustrations, picks the audience's bundled music track, and renders the preview.
-    Inspect the automatic selection-change report: fitting may trim or remove kept clips.
-    In **Package + export**, review the preview; the status line names the narrator, music track and accent
-    words. Once media exists, changing any text or timing needs **Regenerate storyboard**.
-    Confirmation and generation run in one server-side workflow. **Preview storyboard**
-    also generates a missing or stale draft automatically. Generation failures appear
-    on both Review and Package; export remains locked until preview and human approval.
-4. Enter the human reviewer's name, attest the review, approve the storyboard,
+1. On **Source**, choose a local lecture mp4 and the target audience (16:9 is the default aspect ratio).
+   Advanced settings hold the aspect ratio, transcription quality, local model, clip length limits and source link.
+2. Click **Analyze source**. With **Select clips automatically** ticked (the default), the best-ranked clips that
+   fit the 30-60 s budget (up to 3) are kept and confirmed for you. The choice is recorded as automatic, with no
+   human review, in `selection.json`. Untick it to review and keep clips yourself on **Clips**.
+3. Click **Generate preview**, with no cost approval required. To choose by hand, change a Keep checkbox or a
+   clip time first; that switches the record to manual.
+   The app fits complete ideas to 30-60 seconds, generates the storyboard with the configured text model,
+   measures narration, generates card illustrations, picks the audience's bundled music track, and renders the preview.
+   Inspect the automatic selection-change report: fitting may trim or remove kept clips.
+   Once media exists, changing any text or timing needs a new preview. Generation failures appear on the
+   Clips and Studio stages; export remains locked until preview and human approval.
+4. In **Studio**, enter the human reviewer's name, attest the review, approve the preview,
    then export one compilation.
 
 Human approval of the storyboard preview is still required before export.

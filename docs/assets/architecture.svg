@@ -74,7 +74,7 @@
 
   <g filter="url(#shadow)">
     <rect x="750" y="236" width="198" height="64" rx="10" fill="#334155"/>
-    <text x="849" y="262" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff">app.py Gradio</text>
+    <text x="849" y="262" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" fill="#fff">app.py callbacks</text>
     <text x="849" y="282" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" fill="#cbd5e1">4 tabs + keep-gate</text>
   </g>
 

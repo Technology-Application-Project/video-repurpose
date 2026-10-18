@@ -2,7 +2,7 @@
 
 ## Current Workflow (Version 2)
 
-The active Gradio workflow uses Researcher, General public and Kids (ages 8-12),
+The active workflow uses Researcher, General public and Kids (ages 8-12),
 with a measured 30-60 second final duration (60-90 for earlier drafts). The historical walkthrough below
 describes the original prototype; current behavior is:
 
@@ -63,11 +63,21 @@ exports record these settings. A changed profile requires a new preview and huma
 approval. Old exported files remain untouched. Retired explicit macOS profiles are
 still supported, but a saved Edge voice must be regenerated with a current profile.
 
-### Intro and Bridge Renderer 2.0
+### Intro and Bridge Renderer 2.1
 
 - Intros retain the concept artwork, with fixed, layout-aware shading behind text
-        rather than a full-frame veil. Intros and bridges reveal whole phrases with one
-        gentle entrance, then hold still; no decorative wedges, stars or background zoom.
+        rather than a full-frame veil. Intro motion (`cards.OPENING_FX`, local FFmpeg/PIL only):
+        slow push-in on the artwork, rising motes (stars for Kids), a scrim band that opens
+        from its centre line, one light sweep, title revealed word by word with the voice
+        (Researcher: line by line), an accent-word glow, underline and one-beat swell, a top
+        rule and a bottom progress line, a drifting colour wash, and one audience motif
+        (Researcher: a drawn data line; General public: a corner wedge; Kids: popping stars).
+        The opening clears at the end: text and effects fade, the scrim closes and an
+        accent swoosh crosses the frame just before the cut. General public and Kids title
+        words slam in from 1.55x, the first frames carry a camera-flash punch, and a
+        synthesised hit, accent chime and exit whoosh sit under the narration.
+        Text layers stay un-zoomed, so legibility is unchanged. Bridges keep one gentle
+        block entrance, then hold still; no decorative wedges or stars.
 - Narrated bridges use the incoming clip's normalized source frame, preserving its
         framing in both aspect ratios. Up to three samples within the first half-second
         skip black frames. If none is usable, verified existing illustration assets are
@@ -85,7 +95,7 @@ still supported, but a saved Edge voice must be regenerated with a current profi
 
 `POC/pipeline/` 是教育短视频 Demo 的核心处理包：把一节长讲座视频变成 **3–5 条主题相关片段**，再拼成一条带片头、字幕和片尾 CTA 的合辑。
 
-Gradio 入口在 `POC/app.py`。本目录只负责算法与媒体处理，不包含 UI。
+工作流回调在 `POC/app.py`，界面在 `POC/frontend`（React）。本目录只负责算法与媒体处理，不包含 UI。
 
 设计原则：
 
@@ -278,7 +288,7 @@ ffmpeg：
 5. 有效候选不足 3 条时，`_window_fallback()` 按最短时长滑窗硬切若干条（`source: "window"`），保证审片页不空。
 6. 仍为空则抛错，并附上最后一次 Ollama 异常。
 
-`list_ollama_models()` 给 Gradio 下拉框用：优先 `qwen2.5`。
+`list_ollama_models()` 给界面的模型下拉用：优先 `qwen2.5`。
 
 ### 4.4 `rank.py` — 学习目标打分
 
@@ -385,7 +395,7 @@ ffmpeg -ss {start} -to {end} -i source
 | sentence-transformers | 学习目标相似度 |
 | Pillow | 片头/片尾/字幕条位图 |
 | ffmpeg / ffprobe | 裁切、探测、合辑、烧字幕 |
-| Gradio | UI（本目录外） |
+| React | UI（本目录外） |
 
 模型首次运行会下载权重，转写第一步通常最慢。
 
