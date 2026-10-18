@@ -1,0 +1,32 @@
+Brevio Studio: stakeholder introduction (about 86 seconds)
+Voice-over: local Kokoro voice af_heart, speed 1.05
+
+[00:00] Brevio Studio
+Brevio Studio turns one long lecture into a short, reviewed video, for the audience you choose.
+
+[00:06] The problem
+Lectures hold great ideas, but few people watch an hour of video. Cutting highlights by hand is slow, and fully automatic tools are hard to trust.
+
+[00:16] Step 1 · Source
+You start with a lecture video and pick the audience: researchers, the general public, or kids. A source link is optional.
+
+[00:24] Step 2 · Clips
+Brevio transcribes the lecture on your own computer and suggests the strongest clips. You keep up to five and fine tune each one.
+
+[00:33] Step 2 · Blueprint
+Before writing anything, it plans the story: clip count, opening idea, bridges and ending. The finished video is checked against that plan.
+
+[00:42] Step 3 · Studio
+It builds a preview with a narrated opening, bridges and ending, plus illustrations, music and captions, each section beside its source evidence.
+
+[00:51] Step 3 · Approval
+Nothing is exported until a named reviewer has watched the preview and approved it.
+
+[00:57] Step 4 · Export
+Every export gets two plain-language checks: technical, for media, captions and loudness, and structure, for order, bridges, narration and the plan.
+
+[01:07] Safeguards
+Transcription, voices and rendering run locally. Only short text requests use the company gateway, capped at five per run. A person always decides.
+
+[01:17] Brevio Studio
+Faster highlights, consistent quality, and a human in control. Try it on one lecture, and tell us what to improve.

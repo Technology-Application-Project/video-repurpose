@@ -1,0 +1,67 @@
+1
+00:00:00,600 --> 00:00:06,600
+Brevio Studio turns one long lecture into a short, reviewed video, for the audience you choose.
+
+2
+00:00:06,900 --> 00:00:11,181
+Lectures hold great ideas, but few people watch an hour of video.
+
+3
+00:00:11,181 --> 00:00:16,450
+Cutting highlights by hand is slow, and fully automatic tools are hard to trust.
+
+4
+00:00:16,750 --> 00:00:22,737
+You start with a lecture video and pick the audience: researchers, the general public, or kids.
+
+5
+00:00:22,737 --> 00:00:24,375
+A source link is optional.
+
+6
+00:00:24,675 --> 00:00:30,187
+Brevio transcribes the lecture on your own computer and suggests the strongest clips.
+
+7
+00:00:30,187 --> 00:00:32,975
+You keep up to five and fine tune each one.
+
+8
+00:00:33,275 --> 00:00:39,030
+Before writing anything, it plans the story: clip count, opening idea, bridges and ending.
+
+9
+00:00:39,030 --> 00:00:42,100
+The finished video is checked against that plan.
+
+10
+00:00:42,400 --> 00:00:51,700
+It builds a preview with a narrated opening, bridges and ending, plus illustrations, music and captions, each section beside its source evidence.
+
+11
+00:00:52,000 --> 00:00:57,300
+Nothing is exported until a named reviewer has watched the preview and approved it.
+
+12
+00:00:57,600 --> 00:01:07,000
+Every export gets two plain-language checks: technical, for media, captions and loudness, and structure, for order, bridges, narration and the plan.
+
+13
+00:01:07,300 --> 00:01:10,710
+Transcription, voices and rendering run locally.
+
+14
+00:01:10,710 --> 00:01:15,895
+Only short text requests use the company gateway, capped at five per run.
+
+15
+00:01:15,895 --> 00:01:17,600
+A person always decides.
+
+16
+00:01:17,900 --> 00:01:21,823
+Faster highlights, consistent quality, and a human in control.
+
+17
+00:01:21,823 --> 00:01:25,050
+Try it on one lecture, and tell us what to improve.

@@ -1,0 +1,27 @@
+{
+  "title": "Brevio Studio: stakeholder introduction",
+  "voice": "af_heart",
+  "speed": 1.05,
+  "scenes": [
+    {"id": "hook", "label": "Brevio Studio",
+     "text": "Brevio Studio turns one long lecture into a short, reviewed video, for the audience you choose."},
+    {"id": "problem", "label": "The problem",
+     "text": "Lectures hold great ideas, but few people watch an hour of video. Cutting highlights by hand is slow, and fully automatic tools are hard to trust."},
+    {"id": "source", "label": "Step 1 · Source",
+     "text": "You start with a lecture video and pick the audience: researchers, the general public, or kids. A source link is optional."},
+    {"id": "clips", "label": "Step 2 · Clips",
+     "text": "Brevio transcribes the lecture on your own computer and suggests the strongest clips. You keep up to five and fine tune each one."},
+    {"id": "blueprint", "label": "Step 2 · Blueprint",
+     "text": "Before writing anything, it plans the story: clip count, opening idea, bridges and ending. The finished video is checked against that plan."},
+    {"id": "studio", "label": "Step 3 · Studio",
+     "text": "It builds a preview with a narrated opening, bridges and ending, plus illustrations, music and captions, each section beside its source evidence."},
+    {"id": "approval", "label": "Step 3 · Approval",
+     "text": "Nothing is exported until a named reviewer has watched the preview and approved it."},
+    {"id": "export", "label": "Step 4 · Export",
+     "text": "Every export gets two plain-language checks: technical, for media, captions and loudness, and structure, for order, bridges, narration and the plan."},
+    {"id": "safeguards", "label": "Safeguards",
+     "text": "Transcription, voices and rendering run locally. Only short text requests use the company gateway, capped at five per run. A person always decides."},
+    {"id": "close", "label": "Brevio Studio",
+     "text": "Faster highlights, consistent quality, and a human in control. Try it on one lecture, and tell us what to improve."}
+  ]
+}

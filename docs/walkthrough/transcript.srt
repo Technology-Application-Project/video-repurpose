@@ -1,0 +1,163 @@
+1
+00:00:00,800 --> 00:00:03,050
+Welcome to Brevio Studio.
+
+2
+00:00:03,250 --> 00:00:08,550
+This walkthrough follows one lecture, from choosing the source to a checked, approved video.
+
+3
+00:00:08,850 --> 00:00:14,100
+Start by choosing who the video is for: researchers, the general public or kids.
+
+4
+00:00:14,300 --> 00:00:18,525
+Here we pick kids, so the voice, tone and cards will suit children.
+
+5
+00:00:18,825 --> 00:00:23,475
+Under Advanced settings you will find the options most people leave alone.
+
+6
+00:00:23,675 --> 00:00:28,325
+Aspect ratio sets the video shape: landscape, portrait or square.
+
+7
+00:00:28,525 --> 00:00:31,950
+Transcription quality trades speed for accuracy.
+
+8
+00:00:32,150 --> 00:00:36,725
+The local model field names the model that picks clips on this computer.
+
+9
+00:00:36,925 --> 00:00:41,300
+Minimum and maximum clip length limit how long each clip can be.
+
+10
+00:00:41,500 --> 00:00:43,900
+Finally, paste the source link here.
+
+11
+00:00:44,100 --> 00:00:47,325
+It is credited on the ending card and in the post.
+
+12
+00:00:47,625 --> 00:00:49,650
+Now click Analyze source.
+
+13
+00:00:49,850 --> 00:00:54,650
+Brevio transcribes the lecture on this computer and lists its strongest clips.
+
+14
+00:00:54,950 --> 00:00:57,950
+Each suggested clip has a Keep checkbox.
+
+15
+00:00:58,150 --> 00:01:02,200
+Untick any clip you do not want, or tick it again to bring it back.
+
+16
+00:01:02,500 --> 00:01:04,925
+Select a clip to see it in the player.
+
+17
+00:01:05,125 --> 00:01:08,000
+Play it, and click Set in where the clip should start.
+
+18
+00:01:08,200 --> 00:01:10,250
+Click Set out where it should end.
+
+19
+00:01:10,550 --> 00:01:12,675
+Now click Generate preview.
+
+20
+00:01:12,875 --> 00:01:16,650
+Brevio first plans a blueprint, before it writes anything.
+
+21
+00:01:16,850 --> 00:01:24,975
+The bar shows the planned opening, clips, bridges and ending, with an estimated length inside the 30 to 60 second budget.
+
+22
+00:01:25,175 --> 00:01:29,400
+Below it are the ideas for the opening, each bridge and the ending.
+
+23
+00:01:29,600 --> 00:01:32,200
+Then it builds the video from that plan.
+
+24
+00:01:32,500 --> 00:01:35,575
+In the Studio, press play to watch the preview.
+
+25
+00:01:35,775 --> 00:01:39,925
+The timeline lists the opening, each clip, the bridges and the ending.
+
+26
+00:01:40,225 --> 00:01:44,850
+Open Source evidence to see the excerpt behind the selected section.
+
+27
+00:01:45,050 --> 00:01:50,775
+Open Blueprint to see the plan again, with a result line showing the real clip count and length.
+
+28
+00:01:51,075 --> 00:01:53,350
+A named person types their name.
+
+29
+00:01:53,550 --> 00:01:56,200
+They confirm they reviewed the preview.
+
+30
+00:01:56,400 --> 00:02:00,200
+Then they approve it, and nothing can be exported before that.
+
+31
+00:02:00,500 --> 00:02:02,550
+Now click Export video.
+
+32
+00:02:02,750 --> 00:02:06,900
+On the Export page, download the MP4 or the ZIP package.
+
+33
+00:02:07,100 --> 00:02:10,100
+Open Post copy to copy the post text.
+
+34
+00:02:10,400 --> 00:02:15,050
+The technical check covers media, captions, loudness and narration.
+
+35
+00:02:15,250 --> 00:02:19,350
+Open any item to see what it checks and what your export shows.
+
+36
+00:02:19,650 --> 00:02:23,650
+The structure check covers section order, bridges and narration.
+
+37
+00:02:23,850 --> 00:02:30,250
+Five blueprint checks compare the export with the plan: clip count, clips, bridges, length and wording.
+
+38
+00:02:30,450 --> 00:02:35,525
+Wording is compared by key words, because the video text is shortened on purpose.
+
+39
+00:02:35,725 --> 00:02:41,775
+Each section is marked as following the plan or differing, and only a clear drift asks for review.
+
+40
+00:02:42,075 --> 00:02:46,725
+That is the whole workflow: choose, trim, preview, approve and export.
+
+41
+00:02:46,925 --> 00:02:50,350
+A person reviews every video before it goes out.

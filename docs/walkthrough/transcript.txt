@@ -1,0 +1,71 @@
+Brevio Studio: usage walkthrough (about 172 seconds)
+Voice-over: local Kokoro voice af_heart, speed 1.05
+
+[00:00] Brevio Studio
+  00:00  Welcome to Brevio Studio.
+  00:03  This walkthrough follows one lecture, from choosing the source to a checked, approved video.
+
+[00:08] Step 1 · Source
+  00:08  Start by choosing who the video is for: researchers, the general public or kids.
+  00:14  Here we pick kids, so the voice, tone and cards will suit children.
+
+[00:18] Step 1 · Advanced settings
+  00:18  Under Advanced settings you will find the options most people leave alone.
+  00:23  Aspect ratio sets the video shape: landscape, portrait or square.
+  00:28  Transcription quality trades speed for accuracy.
+  00:32  The local model field names the model that picks clips on this computer.
+  00:36  Minimum and maximum clip length limit how long each clip can be.
+  00:41  Finally, paste the source link here.
+  00:44  It is credited on the ending card and in the post.
+
+[00:47] Step 1 · Source
+  00:47  Now click Analyze source.
+  00:49  Brevio transcribes the lecture on this computer and lists its strongest clips.
+
+[00:54] Step 2 · Clips
+  00:54  Each suggested clip has a Keep checkbox.
+  00:58  Untick any clip you do not want, or tick it again to bring it back.
+
+[01:02] Step 2 · Clips
+  01:02  Select a clip to see it in the player.
+  01:05  Play it, and click Set in where the clip should start.
+  01:08  Click Set out where it should end.
+
+[01:10] Step 2 · Blueprint
+  01:10  Now click Generate preview.
+  01:12  Brevio first plans a blueprint, before it writes anything.
+  01:16  The bar shows the planned opening, clips, bridges and ending, with an estimated length inside the 30 to 60 second budget.
+  01:25  Below it are the ideas for the opening, each bridge and the ending.
+  01:29  Then it builds the video from that plan.
+
+[01:32] Step 3 · Studio
+  01:32  In the Studio, press play to watch the preview.
+  01:35  The timeline lists the opening, each clip, the bridges and the ending.
+
+[01:40] Step 3 · Studio
+  01:40  Open Source evidence to see the excerpt behind the selected section.
+  01:45  Open Blueprint to see the plan again, with a result line showing the real clip count and length.
+
+[01:51] Step 3 · Approval
+  01:51  A named person types their name.
+  01:53  They confirm they reviewed the preview.
+  01:56  Then they approve it, and nothing can be exported before that.
+
+[02:00] Step 4 · Export
+  02:00  Now click Export video.
+  02:02  On the Export page, download the MP4 or the ZIP package.
+  02:07  Open Post copy to copy the post text.
+
+[02:10] Step 4 · Technical check
+  02:10  The technical check covers media, captions, loudness and narration.
+  02:15  Open any item to see what it checks and what your export shows.
+
+[02:19] Step 4 · Structure check
+  02:19  The structure check covers section order, bridges and narration.
+  02:23  Five blueprint checks compare the export with the plan: clip count, clips, bridges, length and wording.
+  02:30  Wording is compared by key words, because the video text is shortened on purpose.
+  02:35  Each section is marked as following the plan or differing, and only a clear drift asks for review.
+
+[02:42] Brevio Studio
+  02:42  That is the whole workflow: choose, trim, preview, approve and export.
+  02:46  A person reviews every video before it goes out.
