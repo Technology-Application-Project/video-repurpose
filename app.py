@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import inspect
 import json
 import math
 import shutil
@@ -20,6 +19,7 @@ if str(ROOT) not in sys.path:
 
 from pipeline.assemble import assemble_compilation
 from pipeline.autoselect import auto_select
+from pipeline.blueprint import generate_blueprint, with_final
 from pipeline.cut import cut_clip, make_preview
 from pipeline.cloud import CloudBatch, cloud_quote, quote_markdown
 from pipeline.fit import fit_selection
@@ -50,8 +50,6 @@ from pipeline.utils import (
     parse_objectives,
     run_dir,
 )
-
-ASPECT_RATIOS = ["Original", "16:9", "9:16", "1:1"]
 
 
 def empty_state() -> dict:
@@ -564,6 +562,7 @@ def do_export(
         aspect_ratio=(aspect_ratio or state.get("aspect_ratio") or "Original"),
         storyboard=storyboard,
         storyboard_approval=storyboard_approval,
+        blueprint=state.get("blueprint") if storyboard else None,
         selection_context={
             "target_audience": state.get("target_audience"),
             "audience_profile_version": state.get("audience_profile_version"),
@@ -663,10 +662,17 @@ def open_cloud_batch(state, aspect_ratio):
     return batch
 
 
+def blueprint_summary(plan):
+    timing = plan["timing"]
+    template = " (template plan)" if plan["generated"]["status"] == "template_plan" else ""
+    return (f"{plan['clip_count']} clip(s), about {timing['estimated_total']:.0f}s of "
+            f"{timing['budget'][0]}-{timing['budget'][1]}s{template}.")
+
+
 def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress()):
     state = dict(state or empty_state())
     clips, _ = _confirmed_storyboard_selection(state)
-    state.update(storyboard_draft=None, storyboard_selection_revision=None,
+    state.update(storyboard_draft=None, storyboard_selection_revision=None, blueprint=None,
                  storyboard_approval=None, storyboard_preview_revision=None, storyboard_error=None)
     unchanged = [gr.skip() for _ in range(11 + 3 * (MAX_KEEP - 1))]
     yield state, "Generating storyboard from all selected excerpts...", None, False, gr.update(interactive=False), *unchanged
@@ -688,9 +694,15 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
             state["approval_revision"] = selection_revision(state, clips)
             state["cloud_batch"] = dict(state.get("cloud_batch") or {}, current_revision=state["approval_revision"])
             state["fit_report"] = reports
+            if attempt == 0:
+                progress(0.1, desc="Planning the video blueprint")
+                state["blueprint"] = generate_blueprint(batch.quote["items"]["text"]["model"], clips, audience,
+                                                        state.get("source_url") or "", request=batch.text)
+                yield (state, f"Blueprint ready: {blueprint_summary(state['blueprint'])} Generating the storyboard...",
+                       None, False, gr.update(interactive=False), *unchanged)
             progress(0.15, desc="Generating hook, bridges and ending with the configured text provider")
             draft = generate_storyboard(batch.quote["items"]["text"]["model"], clips, audience,
-                                        state.get("source_url") or "", request=batch.text)
+                                        state.get("source_url") or "", request=batch.text, blueprint=state.get("blueprint"))
             draft["aspect_ratio"] = aspect_ratio
             measured = prepare_narration(draft, clips, Path(state["work"]))
             if DURATION_BUDGET["min_seconds"] <= measured <= DURATION_BUDGET["max_seconds"] - 0.2:
@@ -701,6 +713,7 @@ def generate_package_storyboard(state, aspect_ratio, model, progress=gr.Progress
         progress(0.35, desc="Preparing illustrations and music")
         prepare_media(draft, batch, aspect_ratio)
         draft["fit_report"] = reports
+        state["blueprint"] = with_final(state["blueprint"], clips, measured)
         result = draft_package_storyboard(state, aspect_ratio, generated=draft)
         state = result[0]
         yield (state, "Generated draft ready. Rendering preview...", *result[2:])
@@ -991,323 +1004,3 @@ def rerun_objective_assessment(context, export_key, progress=gr.Progress()):
         return objective_html(report), [str(report_dir / name) for name in ("assessment.md", "assessment.json")]
     except (OSError, RuntimeError, ValueError, KeyError) as exc:
         raise gr.Error(f"Automatic assessment failed: {exc}") from exc
-
-
-ASSESSMENT_CSS = """
-    #transcript-view { max-height: 360px; overflow-y: auto; border: 1px solid var(--border-color-primary); border-radius: 8px; padding: 0 8px; }
-    #transcript-view table { width: 100%; }
-    #transcript-view thead th { position: sticky; top: 0; background: var(--background-fill-primary); z-index: 1; }
-    #assessment-summary { min-width: 0; overflow-x: auto; }
-    .assess .banner { border-radius: 10px; padding: 16px 20px; color: #fff; margin-bottom: 10px; }
-    .assess .banner-pass { background: #1b8a3a; }
-    .assess .banner-fail { background: #c62828; }
-    .assess .banner-unavailable { background: #b26a00; }
-    .assess .banner-title { font-size: 1.5rem; font-weight: 800; letter-spacing: .02em; }
-    .assess .banner, .assess .banner * { color: #fff !important; }
-    .assess .banner-note { margin-top: 8px; font-size: .95rem; }
-    .assess .cell-what { font-weight: 400; font-size: .85rem; opacity: .75; margin-top: 2px; }
-    .assess .cell-fix { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(198,40,40,.12); font-size: .9rem; }
-    .assess .row-unavailable .cell-fix { background: rgba(178,106,0,.14); }
-    .assess .cell-raw { margin-top: 4px; font-size: .8rem; opacity: .7; }
-    .assess .cell-raw summary { cursor: pointer; }
-    .assess .chips { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .assess .chip { background: rgba(255,255,255,.22); border-radius: 999px; padding: 2px 12px; font-size: .9rem; }
-    .assess .assess-meta { margin: 6px 0 10px; opacity: .8; }
-    .assess .assess-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; }
-    .assess .assess-table th { text-align: left; padding: 6px 10px; border-bottom: 2px solid var(--border-color-primary); }
-    .assess .assess-table th:first-child, .assess .cell-status { width: 120px; }
-    .assess .assess-table th:nth-child(2) { width: 20%; }
-    .assess .assess-table td { padding: 8px 10px; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--border-color-primary); }
-    .assess .row-fail td { background: rgba(198,40,40,.14); }
-    .assess .row-fail td:first-child { border-left: 6px solid #c62828; }
-    .assess .row-fail .cell-check { font-weight: 700; }
-    .assess .row-pass td:first-child { border-left: 6px solid #1b8a3a; }
-    .assess .row-unavailable td { background: rgba(178,106,0,.14); }
-    .assess .row-unavailable td:first-child { border-left: 6px solid #b26a00; }
-    .assess .row-not_applicable td { opacity: .65; }
-    .assess .badge { display: inline-block; min-width: 86px; text-align: center; border-radius: 6px; padding: 3px 8px; font-weight: 800; font-size: .85rem; color: #fff; background: #6b7280; }
-    .assess .badge-pass { background: #1b8a3a; }
-    .assess .badge-fail { background: #c62828; }
-    .assess .badge-unavailable { background: #b26a00; }
-    .assess .assess-scope { margin-top: 12px; opacity: .85; }
-    """
-
-
-def build_app():
-    css_options = {"css": ASSESSMENT_CSS} if "css" in inspect.signature(gr.Blocks).parameters else {}
-    with gr.Blocks(title="Educational Short Clip Demo", **css_options) as demo:
-        state = gr.State(empty_state())
-        gr.Markdown(
-            "# Educational Short Clip Demo\n"
-            "**Workflow:** 1 upload and transcribe → 2 nominate (clips are chosen automatically) → "
-            "3 generate the storyboard → 4 review the preview, approve and export → 5 assess.\n\n"
-            "Narrator voice, cards, music and clip choice are automatic for the target audience. "
-            "**Human approval of the storyboard preview is required before export.**"
-        )
-        stack_status = gr.Markdown("Checking Ollama and ffmpeg...")
-
-        with gr.Tabs():
-            with gr.Tab("1. Input"):
-                video = gr.Video(label="Source video (local mp4)", sources=["upload"])
-                target_audience = gr.Dropdown(list(AUDIENCE_GOALS), value=DEFAULT_AUDIENCE, label="Target audience",
-                                             info="Local Kokoro: Researcher - Michael; General public - Heart; "
-                                                 "Kids - Sky (+2 semitones). Offline narration after setup.")
-                source_url = gr.Textbox(label="Source video URL (for CTA / post.txt)")
-                with gr.Row():
-                    min_s = gr.Slider(3, 20, value=6, step=1, label="Min clip seconds")
-                    max_s = gr.Slider(5, 45, value=15, step=1, label="Max clip seconds")
-                with gr.Row():
-                    aspect_ratio = gr.Dropdown(
-                        ASPECT_RATIOS,
-                        value="16:9",
-                        label="Aspect ratio",
-                        info="Generated cards support 16:9 and 9:16; Original and 1:1 use 16:9 artwork.",
-                    )
-                    model = gr.Dropdown(["qwen2.5"], value="qwen2.5", label="Ollama model", allow_custom_value=True)
-                whisper_model = gr.Dropdown([(label, name) for name, label in WHISPER_MODEL_LABELS.items()], value=DEFAULT_WHISPER_MODEL, label="Transcription model",
-                                            info="Slower models spell technical terms better; a model downloads on first use. Re-uploading the same file with the same model reuses the saved transcript.")
-                transcribe_btn = gr.Button("Run transcription", variant="primary")
-                input_status = gr.Markdown("Upload a video, then transcribe.")
-
-            with gr.Tab("2. Transcript + candidates"):
-                transcript_view = gr.Markdown("_Transcript will appear here._", elem_id="transcript-view")
-                nominate_btn = gr.Button("Nominate + rank clips", variant="primary")
-                auto_select_box = gr.Checkbox(value=True, label="Choose clips automatically (no human review)",
-                                              info="Keeps and confirms the best-ranked clips that fit the 30-60 s budget (up to 3). "
-                                                   "Untick to review and keep clips yourself on tab 3.")
-                cand_status = gr.Markdown("Run transcription first.")
-                cand_table = gr.Dataframe(
-                    headers=["id", "editorial estimate / 100", "score status", "start", "end", "title", "takeaway", "selected"],
-                    label="Ranked candidates (read-only)",
-                    interactive=False,
-                    wrap=True,
-                )
-
-            with gr.Tab("3. Review"):
-                gr.Markdown(
-                    "With automatic selection on, the clips below are already kept and confirmed: generate the storyboard. "
-                    "Change a Keep box or a time to take over manually. If you review, keep a clip only if it is "
-                    "**on-topic**, standalone, and one knowledge point. A weak opening is OK — adjust start/end instead of discarding."
-                )
-                kept_md = gr.Markdown(f"**Kept: 0 / {MIN_KEEP}–{MAX_KEEP} required**")
-                quote_view = gr.Markdown("Cloud pricing not loaded.")
-                quote_button = gr.Button("Refresh cloud estimate")
-                confirm_btn = gr.Button("Confirm clips + generate storyboard", variant="primary", interactive=False)
-                fit_report_view = gr.Textbox(label="Automatic selection changes", lines=8, interactive=False)
-                review_status = gr.Markdown("Nominate clips first.")
-                groups, previews, cids, titles, takeaways, metas, starts, ends, keeps, refresh_btns = (
-                    [],
-                    [],
-                    [],
-                    [],
-                    [],
-                    [],
-                    [],
-                    [],
-                    [],
-                    [],
-                )
-                for i in range(MAX_REVIEW):
-                    with gr.Group(visible=False) as group:
-                        gr.Markdown(f"### Candidate {i + 1}")
-                        with gr.Row():
-                            preview = gr.Video(label="Preview", interactive=False)
-                            with gr.Column():
-                                cid = gr.Textbox(label="ID", interactive=False)
-                                title = gr.Textbox(label="Title")
-                                takeaway = gr.Textbox(label="Takeaway", lines=2)
-                                meta = gr.Textbox(label="Editorial score / evidence", lines=6, interactive=False)
-                                with gr.Row():
-                                    start = gr.Number(label="Start (s)")
-                                    end = gr.Number(label="End (s)")
-                                keep = gr.Checkbox(label="Keep (on-topic)")
-                                refresh = gr.Button("Update preview")
-                    groups.append(group)
-                    previews.append(preview)
-                    cids.append(cid)
-                    titles.append(title)
-                    takeaways.append(takeaway)
-                    metas.append(meta)
-                    starts.append(start)
-                    ends.append(end)
-                    keeps.append(keep)
-                    refresh_btns.append(refresh)
-
-            with gr.Tab("4. Package + export"):
-                gr.Markdown("### Storyboard")
-                gr.Markdown("Hook, bridges, ending, accent words, narration and music are generated for the target audience. "
-                            "Once media exists, changing any text or timing below requires **Regenerate storyboard** "
-                            "(new cloud batch); the preview you approve is the one that is exported.")
-                draft_storyboard_btn = gr.Button("Regenerate storyboard")
-                storyboard_status = gr.Markdown("Confirm clips before drafting a storyboard.")
-                storyboard_duration = gr.Markdown(f"Compilation duration: no confirmed clips. Target: {DURATION_BUDGET['min_seconds']}-{DURATION_BUDGET['max_seconds']}s.")
-                intro_title = gr.Textbox(label="Opening hook, spoken (generated up to 7 words; up to 10 allowed)")
-                intro_subtitle = gr.Textbox(label="Opening subtitle (generated up to 6 words; up to 8 allowed)")
-                overlay_position = gr.Radio(["Upper", "Middle"], value="Upper", label="Overlay position", visible=False)
-                with gr.Row():
-                    intro_seconds = gr.Slider(2.0, 3.0, value=3.0, step=0.1, label="Minimum intro card seconds (extended to fit the spoken hook)")
-                    end_seconds = gr.Slider(4.0, 6.0, value=5.0, step=0.5, label="Minimum ending seconds (extended to fit the narration)")
-                end_takeaway = gr.Textbox(label="Ending takeaway, spoken (up to 16 words)", lines=2)
-                end_question = gr.Textbox(label="Reflection question, on screen (up to 12 words)")
-                source_credit = gr.Textbox(label="Source credit", value="Source lecture")
-                cta_text = gr.Textbox(value="Full lecture in description.", label="Ending call to action, spoken (up to 8 words)")
-                transition_seconds = gr.Slider(1.0, 2.0, value=1.5, step=0.1, label="Minimum bridge card seconds (extended to fit the spoken label)")
-                join_groups, join_modes, join_labels = [], [], []
-                for index in range(MAX_KEEP - 1):
-                    with gr.Row(visible=False) as join_group:
-                        join_modes.append(gr.Dropdown(TRANSITION_MODES, value="Divider", label=f"Join {index + 1} to {index + 2}"))
-                        join_labels.append(gr.Textbox(label=f"Bridge {index + 1} label, spoken (generated up to 4 words; up to 8 allowed)"))
-                    join_groups.append(join_group)
-                storyboard_evidence = gr.Dataframe(headers=["clip", "source start", "source end", "source excerpt", "referenced by"],
-                                                  interactive=False, wrap=True, label="Storyboard source evidence")
-                pack_groups, pack_titles, pack_notes = [], [], []
-                for i in range(MAX_KEEP):
-                    with gr.Group(visible=False) as pg:
-                        pt = gr.Textbox(label=f"Clip {i + 1} title", interactive=False)
-                        pn = gr.Textbox(label=f"Clip {i + 1} takeaway", interactive=False)
-                    pack_groups.append(pg)
-                    pack_titles.append(pt)
-                    pack_notes.append(pn)
-                preview_storyboard_btn = gr.Button("Preview storyboard")
-                storyboard_preview = gr.Video(label="Storyboard preview", interactive=False)
-                storyboard_reviewer = gr.Textbox(label="Storyboard reviewer name")
-                storyboard_attested = gr.Checkbox(label="I reviewed the preview and source context; claims, joins and text placement are supported.")
-                approve_storyboard_btn = gr.Button("Approve storyboard", variant="primary")
-                export_btn = gr.Button("Export compilation", variant="primary", interactive=False)
-                export_status = gr.Markdown(f"Confirm {MIN_KEEP}–{MAX_KEEP} clips before export.")
-                compilation_video = gr.Video(label="compilation.mp4", interactive=False)
-                post_view = gr.Textbox(label="Generated post.txt", lines=14)
-                zip_file = gr.File(label="Download zip")
-
-            with gr.Tab("5. Assessment"):
-                assessment_context = gr.State(None)
-                with gr.Row():
-                    assessment_export = gr.Dropdown(choices=[], label="Export to assess", scale=5)
-                    refresh_exports = gr.Button("Refresh exports", scale=1)
-                with gr.Row():
-                    with gr.Column(scale=3):
-                        assessment_video = gr.Video(label="Final exported video", interactive=False)
-                    with gr.Column(scale=2):
-                        assessment_post = gr.Textbox(label="Exported post", lines=5, interactive=False)
-                rerun_assessment = gr.Button("Re-run checks")
-                assessment_summary = gr.HTML("No export selected.", elem_id="assessment-summary")
-                assessment_files = gr.File(label="Assessment reports", file_count="multiple", interactive=False)
-
-        storyboard_fields = [intro_title, intro_subtitle, intro_seconds, end_takeaway, end_question,
-                             source_credit, cta_text, end_seconds, transition_seconds, *join_modes, *join_labels,
-                             overlay_position, aspect_ratio]
-        storyboard_reset_outputs = [state, storyboard_status, storyboard_preview, storyboard_attested, export_btn]
-        storyboard_draft_outputs = [*storyboard_reset_outputs, storyboard_evidence, *storyboard_fields[:-1], *join_groups]
-        quote_button.click(refresh_cloud_quote, [], [quote_view],
-                   concurrency_id="audience_pipeline")
-        for field in [state, *storyboard_fields]:
-            field.change(storyboard_duration_status, [state, *storyboard_fields], [storyboard_duration],
-                          concurrency_id="audience_pipeline")
-        preview_storyboard_btn.click(preview_or_generate_storyboard, [state, model, *storyboard_fields], storyboard_draft_outputs,
-                                     concurrency_id="audience_pipeline")
-        approve_storyboard_btn.click(approve_package_storyboard,
-                                     [state, storyboard_attested, storyboard_reviewer, *storyboard_fields],
-                                     [state, storyboard_status, export_btn], concurrency_id="audience_pipeline")
-        for field in storyboard_fields:
-            field.input(invalidate_edited_storyboard, [state, *storyboard_fields], storyboard_reset_outputs,
-                        concurrency_id="audience_pipeline")
-        for field in (storyboard_reviewer, storyboard_attested):
-            field.input(revoke_storyboard_approval, [state], [state, storyboard_status, export_btn],
-                         concurrency_id="audience_pipeline")
-        assessment_outputs = [assessment_summary, assessment_files]
-        assessment_load_outputs = [assessment_context, assessment_video, assessment_post, *assessment_outputs]
-        assessment_export.change(
-            load_objective_assessment, [assessment_export], assessment_load_outputs,
-            concurrency_id="assessment_review",
-        )
-        refresh_exports.click(refresh_assessment_exports, [], [assessment_export]).success(
-            load_objective_assessment, [assessment_export], assessment_load_outputs,
-            concurrency_id="assessment_review",
-        )
-        rerun_assessment.click(
-            rerun_objective_assessment, [assessment_context, assessment_export], assessment_outputs,
-            concurrency_id="assessment_review",
-        )
-
-        review_outputs = []
-        for index in range(MAX_REVIEW):
-            review_outputs.extend(
-                [groups[index], previews[index], cids[index], titles[index], takeaways[index], metas[index], starts[index], ends[index], keeps[index]]
-            )
-        transcribe_btn.click(
-            transcribe_for_audience,
-            [video, target_audience, source_url, min_s, max_s, aspect_ratio, model, state, whisper_model],
-            [state, input_status, transcript_view, cand_status, cand_table, kept_md, confirm_btn, export_btn, *review_outputs],
-            concurrency_id="audience_pipeline",
-        ).success(invalidate_package_storyboard, [state], storyboard_reset_outputs, concurrency_id="audience_pipeline")
-        nominate_outputs = [
-            state,
-            cand_status,
-            cand_table,
-            kept_md,
-            confirm_btn,
-            export_btn,
-        ]
-        for i in range(MAX_REVIEW):
-            nominate_outputs.extend(
-                [groups[i], previews[i], cids[i], titles[i], takeaways[i], metas[i], starts[i], ends[i], keeps[i]]
-            )
-        nominate_btn.click(nominate_for_audience, [state, model, target_audience, min_s, max_s, auto_select_box],
-                   nominate_outputs, concurrency_id="audience_pipeline").success(
-                       invalidate_package_storyboard, [state], storyboard_reset_outputs, concurrency_id="audience_pipeline")
-        target_audience.input(change_target_audience, [target_audience, state], nominate_outputs,
-                      concurrency_id="audience_pipeline")
-        for duration_control in (min_s, max_s):
-            duration_control.input(change_duration_limits, [min_s, max_s, target_audience, state],
-                                   nominate_outputs, concurrency_id="audience_pipeline")
-
-        def bind_refresh(index):
-            def _run(start, end, st):
-                return refresh_one_preview(index, start, end, st)
-
-            return _run
-
-        for i, btn in enumerate(refresh_btns):
-            btn.click(bind_refresh(i), [starts[i], ends[i], state], [previews[i]])
-
-        for box in keeps:
-            box.input(count_kept, [state, *keeps], [state, kept_md, confirm_btn, export_btn], concurrency_id="audience_pipeline")
-
-        for field in [*titles, *takeaways, *starts, *ends]:
-            field.input(count_kept, [state, *keeps], [state, kept_md, confirm_btn, export_btn], concurrency_id="audience_pipeline")
-        for index in range(MAX_REVIEW):
-            for field in (starts[index], ends[index]):
-                field.input(invalidate_range_score, [], [metas[index]])
-
-        confirm_outputs = [review_status, kept_md]
-        for i in range(MAX_KEEP):
-            confirm_outputs.extend([pack_groups[i], pack_titles[i], pack_notes[i]])
-        confirm_btn.click(
-            confirm_and_generate_with_rows,
-            [state, aspect_ratio, model, *cids, *titles, *takeaways, *starts, *ends, *keeps],
-            [*confirm_outputs, *storyboard_draft_outputs, *titles, *takeaways, *starts, *ends, *keeps, fit_report_view],
-            concurrency_id="audience_pipeline",
-        )
-        draft_storyboard_btn.click(
-            confirm_and_generate_with_rows,
-            [state, aspect_ratio, model, *cids, *titles, *takeaways, *starts, *ends, *keeps],
-            [*confirm_outputs, *storyboard_draft_outputs, *titles, *takeaways, *starts, *ends, *keeps, fit_report_view],
-            concurrency_id="audience_pipeline",
-        )
-        for field in [*titles, *takeaways, *starts, *ends, *keeps, target_audience, min_s, max_s, video]:
-            field.input(invalidate_package_storyboard, [state], storyboard_reset_outputs, concurrency_id="audience_pipeline")
-        export_btn.click(
-            export_package_storyboard,
-            [state, storyboard_attested, storyboard_reviewer, *storyboard_fields, *cids, *titles, *takeaways, *starts, *ends, *keeps],
-            [state, export_status, compilation_video, post_view, zip_file],
-            concurrency_id="audience_pipeline",
-        ).success(refresh_assessment_exports, [compilation_video], [assessment_export])
-        demo.load(ping_stack, [model], [model, stack_status])
-        demo.load(refresh_cloud_quote, [], [quote_view])
-        demo.load(refresh_assessment_exports, [], [assessment_export])
-    return demo
-
-
-if __name__ == "__main__":
-    launch_options = {"css": ASSESSMENT_CSS} if "css" in inspect.signature(gr.Blocks.launch).parameters else {}
-    build_app().queue().launch(**launch_options)

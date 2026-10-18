@@ -74,6 +74,6 @@ def load_checkpoint(run_id: str, root: Path = WORK_ROOT) -> dict:
                  storyboard_preview_revision=None, cloud_batch=None)
     from pipeline.storyboard import AUDIENCE_PROFILE_VERSION, DURATION_BUDGET
     if state.get("audience_profile_version") != AUDIENCE_PROFILE_VERSION:
-        state.update(storyboard_draft=None, candidates=[], approved=[], fit_report=None,
+        state.update(storyboard_draft=None, blueprint=None, candidates=[], approved=[], fit_report=None,
                      audience_migration_required=True, duration_budget=dict(DURATION_BUDGET))
     return state

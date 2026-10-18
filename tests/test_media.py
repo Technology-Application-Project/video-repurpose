@@ -128,6 +128,7 @@ class MediaTests(unittest.TestCase):
                         self.assertLess(peak, 1.0)
                         if audience == "Kids" and aspect == "16:9":
                             import zipfile
+                            from pipeline.blueprint import template_blueprint
                             from pipeline.assess import artifact_hashes, _narration_metrics
                             import srt
                             with patch("pipeline.export.EXPORT_ROOT", root / "exports"), patch(
@@ -135,9 +136,16 @@ class MediaTests(unittest.TestCase):
                             ):
                                 exported = export_clips(run_id="frozen", source_video=str(source), segments=segments,
                                     clips=clips, source_url="", work=work, cta_text=draft["ending"]["cta"],
-                                    aspect_ratio=aspect, storyboard=draft, storyboard_approval={"kind": "human"})
+                                    aspect_ratio=aspect, storyboard=draft, storyboard_approval={"kind": "human"},
+                                    blueprint=template_blueprint(clips, audience))
                             destination = Path(exported[3]).parent
                             manifest = json.loads((destination / "selection.json").read_text())
+                            self.assertEqual(manifest["blueprint"]["clip_count"], 2)
+                            from pipeline.structure import structure_check
+                            check = structure_check(manifest, media_duration(destination / "compilation.mp4"))
+                            self.assertEqual(check["counts"]["fail"], 0, check["metrics"])
+                            self.assertEqual(check["counts"]["unavailable"], 0)
+                            self.assertIn("blueprint_timing", {item["id"] for item in check["metrics"]})
                             self.assertNotIn("broll", manifest["asset_inventory"])
                             hashes = artifact_hashes(destination)
                             with zipfile.ZipFile(exported[2]) as bundle:
@@ -236,7 +244,8 @@ class MediaTests(unittest.TestCase):
                         red, green, blue = frame.convert("RGB").getpixel((frame.width // 2, frame.height // 2))
                         self.assertGreater(blue, red + 100)
                     with Image.open(work / "card_2_bg.png") as frame:
-                        self.assertGreater(len(frame.getcolors(frame.width * frame.height)), 10)
+                        self.assertGreaterEqual(len(frame.getcolors(frame.width * frame.height)), 2,
+                                                "source frame plus accent bar; 9:16 adds letterbox padding")
                     self.assertTrue(list(work.glob("card_2_0*.png")), "bridge text must be separate reveal layers")
                     with Image.open(work / "next_frame_4.png") as frame:
                         red, green, blue = frame.convert("RGB").getpixel((frame.width // 2, frame.height // 2))

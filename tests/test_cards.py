@@ -67,6 +67,39 @@ class CardLayoutTests(unittest.TestCase):
         self.assertEqual([text for text, role, _ in beats[0] if role == "title"], [storyboard["ending"]["takeaway"]])
         self.assertEqual([text for text, role, _ in beats[1] if role == "question"], [storyboard["ending"]["cta"]])
 
+    def test_short_url_is_a_clean_on_screen_form(self):
+        from pipeline.utils import short_url
+        self.assertEqual(short_url("https://www.example.org/lectures/week-3/?utm_source=x#t=5"), "example.org/lectures/week-3")
+        self.assertEqual(short_url("http://example.org/"), "example.org")
+        self.assertEqual(short_url("https://www.example.org/a/b", host_only=True), "example.org")
+        self.assertEqual(short_url("https://www.example.edu/courses/economics/week-3-lecture?utm=x"), "example.edu/.../week-3-lecture")
+        long = short_url("https://example.edu/courses/economics/lecture-12-growth-and-institutions")
+        self.assertEqual(len(long), 32)
+        self.assertTrue(long.startswith("example.edu/.../lecture-12") and long.endswith("..."))
+        for bad in ("", "example.org/lecture", "ftp://example.org/a", "not a url", "https://", None):
+            self.assertEqual(short_url(bad), "", bad)
+
+    def test_source_link_appears_on_the_ending_card_and_replaces_the_default_credit(self):
+        storyboard = draft()
+        storyboard["source_url"] = "https://www.example.org/lectures/week-3?utm=x#t=5"
+        beats, corner = cards.card_beats("ending", storyboard, KICKERS)
+        self.assertEqual(beats[1][-1], ("example.org/lectures/week-3", "link", False))
+        self.assertFalse(any(role == "link" for _, role, _ in beats[0]))
+        self.assertEqual(corner, ["Source: example.org"])
+        storyboard["ending"]["credit"] = "Prof. Lee, Week 3"
+        self.assertEqual(cards.card_beats("ending", storyboard, KICKERS)[1], ["Prof. Lee, Week 3"])
+        plain, corner = cards.card_beats("ending", draft(), KICKERS)
+        self.assertFalse(any(role == "link" for beat in plain for _, role, _ in beat))
+        self.assertEqual(corner, ["Source lecture"])
+        opening, _ = cards.card_beats("opening", {**storyboard, "source_url": "https://example.org/a"}, KICKERS)
+        self.assertFalse(any(role == "link" for _, role, _ in opening[0]))
+
+    def test_ending_with_a_source_link_fits_both_canvases_for_every_audience(self):
+        url = "https://sub.very-long-university-domain.example.edu/courses/economics/lecture-12-growth"
+        for audience in PRESENTATION:
+            with self.subTest(audience=audience):
+                cards.check_card_text("ending", {**draft(audience), "source_url": url}, PRESENTATION[audience]["kickers"])
+
     def test_credit_is_a_corner_label_not_part_of_the_text_stack(self):
         beats, corner = cards.card_beats("ending", draft(media_directory=tempfile.gettempdir()), KICKERS)
         self.assertEqual(corner, ["Source lecture", "AI illustration"])
@@ -140,7 +173,7 @@ class CardLayoutTests(unittest.TestCase):
         self.assertEqual([cards.card_drift("opening"), cards.card_drift("divider", 2), cards.card_drift("divider", 3),
                           cards.card_drift("ending")], [1, -1, 1, 0])
 
-    def test_real_frames_are_blurred_but_generated_illustrations_are_not(self):
+    def test_blur_is_available_but_bridges_keep_the_unblurred_source_frame(self):
         with tempfile.TemporaryDirectory() as directory:
             picture = Path(directory) / "frame.png"
             stripes = Image.new("RGB", (640, 360), "white")
@@ -160,7 +193,7 @@ class CardLayoutTests(unittest.TestCase):
                 for still in (picture, None):
                     cards.build_card("divider", storyboard, KICKERS, Path(directory), "d", 640, 360, duration=2.0,
                                      narration_seconds=1.4, number=2, still=still)
-            self.assertEqual([call.kwargs["blur"] for call in render.call_args_list], [True, False])
+            self.assertEqual([call.kwargs["blur"] for call in render.call_args_list], [False, False])
 
 
 def _luminance(pixels):
@@ -327,7 +360,64 @@ class CardScheduleTests(unittest.TestCase):
                 self.assertLess(text_layers[0]["start"], 0.2)
                 _, corner = cards.card_beats(kind, draft(), KICKERS, number=2)
                 self.assertNotIn("AI illustration", corner)
-                self.assertEqual(bool([layer for layer in layers if not layer["slide"] and not layer.get("decor")]), bool(corner))
+                self.assertEqual(bool([layer for layer in layers if not layer["slide"] and not layer.get("decor")
+                                       and not layer.get("static")]), bool(corner))
+
+    def test_opening_adds_motes_opening_scrim_sweep_and_accent_underline_for_every_audience(self):
+        for audience in PRESENTATION:
+            with self.subTest(audience=audience), tempfile.TemporaryDirectory() as directory:
+                storyboard = draft(audience, media_directory=directory)
+                storyboard["opening"]["accent"] = "nations?"
+                _, layers = cards.build_card("opening", storyboard, PRESENTATION[audience]["kickers"], Path(directory),
+                                             "o", 640, 360, duration=3.0, narration_seconds=2.4)
+                effects = [layer for layer in layers if layer.get("fx") and layer.get("decor")]
+                kinds = [layer["fx"]["kind"] for layer in effects]
+                self.assertIn("flash", kinds)
+                kinds = [kind for kind in kinds if kind != "flash"]
+                effects = [layer for layer in effects if layer["fx"]["kind"] != "flash"]
+                slams = [layer for layer in layers if layer.get("fx") and not layer.get("decor")]
+                self.assertEqual(bool(slams), audience != "Researcher", "word-by-word audiences slam each title word in")
+                self.assertEqual(kinds[:3], ["float", "float", "open"], "motes, colour wash, scrim band")
+                self.assertIn("pop", kinds)
+                self.assertGreaterEqual(kinds.count("grow"), 3, "two rules and the accent underline")
+                self.assertEqual(kinds.count("slide"), 3 if audience == "General public" else 2, "sweep, exit swoosh, wedge")
+                self.assertEqual(effects[-1]["fx"]["kind"], "slide", "exit swoosh is the last effect")
+                self.assertAlmostEqual(effects[-1]["start"] + effects[-1]["fx"]["seconds"], 3.0 - 0.05, delta=0.1)
+                pulse = [layer for layer in effects if layer["fx"]["kind"] == "pulse"]
+                underline = [layer for layer in effects if "underline" in layer["png"].name]
+                self.assertEqual(len(pulse), 1)
+                self.assertGreater(pulse[0]["start"], underline[0]["start"] - 0.2)
+                self.assertLessEqual(pulse[0]["start"] + pulse[0]["fx"]["seconds"], 3.0 - cards.EXIT_SECONDS + 0.3)
+                scrim = next(layer for layer in effects if layer["fx"]["kind"] == "open")
+                self.assertEqual(scrim["fx"]["close"], 3.0 - cards.EXIT_SECONDS)
+                self.assertTrue(all(layer["end"] == 3.0 - 0.1 for layer in layers if layer["slide"]), "text clears with the card")
+                self.assertGreater(cards.card_motion(audience, "opening")["zoom"], 1.0)
+                self.assertEqual(cards.card_motion(audience, "divider")["zoom"], 1.0)
+
+    def test_opening_sting_is_synthesised_to_the_flash_pulse_and_swoosh_timing(self):
+        import wave
+        with tempfile.TemporaryDirectory() as directory:
+            storyboard = draft(media_directory=directory)
+            storyboard["opening"]["accent"] = "nations?"
+            _, layers = cards.build_card("opening", storyboard, KICKERS, Path(directory), "o", 640, 360,
+                                         duration=3.0, narration_seconds=2.4)
+            path = cards.opening_sting(layers, Path(directory) / "o.mp4", 3.0)
+            with wave.open(str(path)) as handle:
+                self.assertEqual((handle.getframerate(), handle.getnchannels()), (44100, 1))
+                self.assertEqual(handle.getnframes(), 3 * 44100)
+                samples = __import__("numpy").frombuffer(handle.readframes(handle.getnframes()), dtype="<i2") / 32768
+            self.assertLess(abs(samples).max(), 0.9)
+            self.assertGreater(abs(samples[:4000]).max(), 0.2, "hit at the flash")
+            self.assertGreater(abs(samples[int(2.6 * 44100):]).max(), 0.02, "whoosh at the exit")
+            self.assertIsNone(cards.opening_sting([layer for layer in layers if layer.get("fx", {}).get("kind") != "flash"],
+                                                  Path(directory) / "x.mp4", 3.0))
+
+    def test_opening_without_an_accent_word_has_no_underline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, layers = cards.build_card("opening", draft(media_directory=directory), KICKERS, Path(directory), "o",
+                                         640, 360, duration=3.0, narration_seconds=2.4)
+        self.assertNotIn("pop", [layer["fx"]["kind"] for layer in layers if layer.get("fx") and "glow" in layer["png"].name])
+        self.assertFalse([layer for layer in layers if layer.get("fx") and "underline" in layer["png"].name])
 
     def test_title_lines_appear_as_the_voice_reaches_them(self):
         _, layers = self.build("opening", 3.4, 2.6)
@@ -345,14 +435,14 @@ class CardScheduleTests(unittest.TestCase):
         self.assertTrue(all(layer["start"] >= switch - 0.01 for layer in second))
         self.assertGreaterEqual(switch, 1.3)
 
-    def test_bridges_use_generated_illustrations_alternating_and_mirrored(self):
+    def test_bridges_use_generated_illustrations_alternating_without_mirroring(self):
         with tempfile.TemporaryDirectory() as media:
             storyboard = draft(media_directory=media, count=5)
             with patch.object(cards, "render_background", wraps=cards.render_background) as render:
                 for number in (2, 3, 4, 5):
                     self.build("divider", 2.0, 1.4, number=number, storyboard=storyboard)
             pictures = [(call.kwargs["picture"].name, call.kwargs["mirror"]) for call in render.call_args_list]
-        self.assertEqual(pictures, [("opening.png", False), ("ending.png", False), ("opening.png", True), ("ending.png", True)])
+        self.assertEqual(pictures, [("opening.png", False), ("ending.png", False), ("opening.png", False), ("ending.png", False)])
 
 
 @unittest.skipUnless(os.environ.get("RUN_MEDIA_TESTS") == "1", "Set RUN_MEDIA_TESTS=1 for ffmpeg integration tests")

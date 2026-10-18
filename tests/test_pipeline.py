@@ -37,14 +37,14 @@ class CloudQuoteTests(unittest.TestCase):
                     config[field].pop("video")
                 path.write_text(json.dumps(config))
                 self.assertEqual(cloud_quote(), quote)
-                self.assertAlmostEqual(quote["total_usd"], 0.30)
+                self.assertAlmostEqual(quote["total_usd"], 0.35)
                 self.assertNotIn("music", quote["items"])
                 self.assertEqual(quote["music_source"], "library")
                 self.assertIn("no Google media requests", quote_markdown(quote))
                 self.assertIn("bundled CC0 library", quote_markdown(quote))
                 path.write_text(json.dumps({**config, "music_source": "generated"}))
                 generated = cloud_quote()
-                self.assertAlmostEqual(generated["total_usd"], 0.35)
+                self.assertAlmostEqual(generated["total_usd"], 0.40)
                 self.assertEqual(generated["items"]["music"]["provider"], "local-illustration")
                 self.assertNotEqual(generated["revision"], quote["revision"])
                 path.write_text(json.dumps({**config, "music_source": "stock"}))
@@ -122,7 +122,11 @@ class CloudWorkflowTests(unittest.TestCase):
         response = {"opening": {"title": "Which assumptions matter?", "subtitle": "Check before applying advice", "evidence_ids": ["c1"]},
                     "ending": {"takeaway": "Check assumptions before applying advice.", "question": "Which assumption would you check?",
                                "cta": "Explain one assumption.", "seconds": 5, "evidence_ids": ["c1"]}, "transitions": []}
-        request = Mock(return_value={"message": {"content": json.dumps(response)}, "provider": "portkey"})
+        blueprint = {"clip_count_reason": "One clip fits the budget", "clips": [{"id": "c1", "role": "Core idea"}],
+                     "opening": {"approach": "question", "idea": "Which assumptions matter before acting"}, "bridges": [],
+                     "ending": {"synthesis": "Check assumptions first", "action": "Explain one assumption"}}
+        request = Mock(side_effect=lambda **kwargs: {"message": {"content": json.dumps(
+            blueprint if "clip_count_reason" in kwargs["format"]["properties"] else response)}, "provider": "portkey"})
         with patch("app.cloud_quote", return_value=self.quote), patch("pipeline.cloud.CloudBatch.text", request), patch(
             "pipeline.cloud.CloudBatch.close"
         ) as close_batch, patch("pipeline.fit.review_candidate",
@@ -140,7 +144,15 @@ class CloudWorkflowTests(unittest.TestCase):
         self.assertEqual(checked["approval_revision"], current["approval_revision"])
         self.assertEqual(final[3], current["approved"][0]["title"])
         self.assertEqual(len(final), len(outputs[0]))
-        request.assert_called_once()
+        self.assertEqual(request.call_count, 2, "one blueprint request, then one storyboard request")
+        plan = current["blueprint"]
+        self.assertEqual(plan["generated"]["status"], "model_plan")
+        self.assertEqual(plan["clip_count"], 1)
+        self.assertEqual(plan["final"]["clip_count"], 1)
+        self.assertTrue(plan["final"]["same_clips"])
+        self.assertEqual(plan["final"]["measured_total"], 45)
+        self.assertEqual(current["storyboard_draft"]["clip_ids"], [item["id"] for item in plan["clips"]])
+        self.assertNotIn("blueprint", current["storyboard_draft"])
         close_batch.assert_called_once()
         self.assertTrue((self.root / "cloud" / current["cloud_batch"]["batch_id"] / "requests.json").is_file())
         self.assertEqual(current["cloud_batch"]["current_revision"], current["approval_revision"])
@@ -169,13 +181,8 @@ class CloudWorkflowTests(unittest.TestCase):
         self.assertIsNone(batch._portkey_client)
         batch.close()
 
-    def test_ui_retains_preview_approval_but_has_no_cost_consent(self):
-        with app.build_app() as demo:
-            config = demo.get_config_file()
-        checkboxes = [item["props"].get("label", "") for item in config["components"] if item["type"] == "checkbox"]
-        self.assertFalse(any("cost" in label.lower() or "cloud" in label.lower() for label in checkboxes))
+    def test_there_is_no_cost_consent_step(self):
         self.assertFalse(hasattr(app, "approve_cloud_budget"))
-        self.assertTrue(any("review" in label.lower() or "watch" in label.lower() for label in checkboxes))
 
     def test_completed_text_is_reused_and_tampering_blocks_regeneration(self):
         batch = self.batch()
@@ -708,7 +715,8 @@ class StoryboardTests(unittest.TestCase):
             outputs = list(app.generate_package_storyboard(state, "9:16", "selected-model", progress=Mock()))
         expected = len(app.draft_package_storyboard(state, "Original"))
         self.assertTrue(all(len(output) == expected for output in outputs))
-        self.assertEqual(outputs[1][6], "Generated title")
+        self.assertIn("Blueprint ready", outputs[1][1])
+        self.assertEqual(outputs[2][6], "Generated title")
         self.assertEqual(outputs[-1][2], "preview.mp4")
         self.assertEqual(generator.call_args.args[0], "selected-model")
         self.assertEqual(generator.call_args.args[1], state["approved"])
@@ -734,13 +742,6 @@ class StoryboardTests(unittest.TestCase):
             outputs = list(app.confirm_and_generate_storyboard(state, "Original", "model", *rows, progress=Mock()))
         self.assertIn("model unavailable", outputs[-1][0])
         self.assertEqual(outputs[-1][0], outputs[-1][3 + 3 * app.MAX_KEEP])
-
-    def test_confirmation_and_preview_event_wiring(self):
-        demo = app.build_app()
-        for name in ("confirm_and_generate_with_rows", "preview_or_generate_storyboard"):
-            dependency = next(item for item in demo.config["dependencies"] if item["api_name"] == name)
-            self.assertIsNone(dependency["trigger_after"])
-            self.assertTrue(dependency["types"]["generator"])
 
     def test_failed_auto_preview_keeps_generated_fields_without_approval(self):
         state, _ = PipelineTests().selection()
@@ -786,10 +787,12 @@ class StoryboardTests(unittest.TestCase):
     def generation_clips(self):
         return [dict(clip, end=clip["start"] + 15) for clip in self.clips()[:2]]
 
+    LECTURE_URL = "https://example.org/lecture"
+
     def test_generated_storyboard_uses_all_excerpts_and_audience(self):
         response = {"message": {"content": json.dumps(self.generated_response())}}
         with patch("pipeline.storyboard.request_text", return_value=response) as chat:
-            draft = generate_storyboard("model", self.generation_clips(), "General public")
+            draft = generate_storyboard("model", self.generation_clips(), "General public", self.LECTURE_URL)
         self.assertEqual(draft["generation"]["status"], "model_draft")
         self.assertEqual(draft["opening"]["mode"], "Card")
         self.assertTrue(draft["opening"]["narration"])
@@ -799,14 +802,41 @@ class StoryboardTests(unittest.TestCase):
         self.assertTrue(draft["ending"]["narration"])
         self.assertEqual(draft["ending"]["cta"], self.generated_response()["ending"]["cta"])
         payload = json.loads(chat.call_args.kwargs["messages"][1]["content"])
+        self.assertTrue(payload["source_link_available"])
         self.assertEqual(payload["audience"], "General public")
         self.assertEqual(payload["audience_profile"], AUDIENCE_PROFILES["General public"])
         instruction = chat.call_args.kwargs["messages"][0]["content"]
         self.assertIn("audience-specific hook", instruction)
-        self.assertIn("FOLLOWING excerpt", instruction)
+        self.assertIn("BOTH neighboring excerpts", instruction)
         self.assertIn("CTA must name a specific idea", instruction)
         self.assertEqual(len(payload["selected_clips_in_order"]), 2)
         validate_storyboard(draft, self.generation_clips())
+
+    def test_model_blueprint_guides_the_storyboard_prompt(self):
+        from pipeline.blueprint import generate_blueprint, template_blueprint
+        clips = self.generation_clips()
+        plan_reply = {"message": {"content": json.dumps({
+            "clip_count_reason": "Two clips fit", "clips": [{"id": clip["id"], "role": "Setup"} for clip in clips],
+            "opening": {"approach": "question", "idea": "Ask why advice fails"},
+            "bridges": [{"before_clip_id": "c1", "relationship": "contrast", "idea": "Contrast two cases"}],
+            "ending": {"synthesis": "Check assumptions", "action": "Test one assumption"}})}}
+        plan = generate_blueprint("model", clips, "General public", self.LECTURE_URL, request=lambda **_: plan_reply)
+        response = {"message": {"content": json.dumps(self.generated_response())}}
+        with patch("pipeline.storyboard.request_text", return_value=response) as chat:
+            generate_storyboard("model", clips, "General public", self.LECTURE_URL, blueprint=plan)
+        payload = json.loads(chat.call_args.kwargs["messages"][1]["content"])
+        self.assertEqual(payload["blueprint"]["opening"], {"approach": "question", "idea": "Ask why advice fails"})
+        self.assertEqual(payload["blueprint"]["bridges"], [{"before_clip_id": "c1", "relationship": "contrast", "idea": "Contrast two cases"}])
+        self.assertEqual(payload["blueprint"]["ending"], {"synthesis": "Check assumptions", "action": "Test one assumption"})
+        self.assertIn("approved plan", chat.call_args.kwargs["messages"][0]["content"])
+        with patch("pipeline.storyboard.request_text", return_value=response) as chat:
+            generate_storyboard("model", clips, "General public", blueprint=plan)
+        self.assertNotIn("action", json.loads(chat.call_args.kwargs["messages"][1]["content"])["blueprint"]["ending"])
+        for other in (template_blueprint(clips, "General public"), None, dict(plan, clips=plan["clips"][:1])):
+            with patch("pipeline.storyboard.request_text", return_value=response) as chat:
+                generate_storyboard("model", clips, "General public", blueprint=other)
+            self.assertNotIn("blueprint", json.loads(chat.call_args.kwargs["messages"][1]["content"]))
+            self.assertNotIn("approved plan", chat.call_args.kwargs["messages"][0]["content"])
 
     def test_generation_retries_invalid_references_but_never_silently_falls_back(self):
         invalid = self.generated_response()
@@ -826,10 +856,32 @@ class StoryboardTests(unittest.TestCase):
         bad = {"message": {"content": json.dumps(generic)}}
         good = {"message": {"content": json.dumps(self.generated_response())}}
         with patch("pipeline.storyboard.request_text", side_effect=[bad, good]):
-            self.assertEqual(generate_storyboard("model", self.generation_clips(), "Kids")["generation"]["attempts"], 2)
+            self.assertEqual(generate_storyboard("model", self.generation_clips(), "Kids", self.LECTURE_URL)["generation"]["attempts"], 2)
         with patch("pipeline.storyboard.request_text", return_value=bad):
             with self.assertRaisesRegex(ValueError, "CTA is generic"):
-                generate_storyboard("model", self.generation_clips(), "Kids")
+                generate_storyboard("model", self.generation_clips(), "Kids", self.LECTURE_URL)
+
+    def test_without_a_source_url_the_cta_is_the_fixed_full_lecture_line(self):
+        from pipeline.storyboard import FIXED_CTA
+        self.assertEqual(FIXED_CTA, "Full lecture in description.")
+        self.assertEqual(draft_storyboard(self.generation_clips(), "Kids")["ending"]["cta"], FIXED_CTA)
+        self.assertEqual(draft_storyboard(self.generation_clips(), "Kids", self.LECTURE_URL)["ending"]["cta"], FIXED_CTA)
+        for spoken in ("Test one assumption in your next example.", "Try it now!"):
+            reply = self.generated_response()
+            reply["ending"]["cta"] = spoken
+            with patch("pipeline.storyboard.request_text", return_value={"message": {"content": json.dumps(reply)}}) as chat:
+                draft = generate_storyboard("model", self.generation_clips(), "Kids")
+            self.assertEqual(draft["ending"]["cta"], FIXED_CTA)
+            self.assertEqual(draft["generation"]["attempts"], 1, "the fixed line is never rejected as generic")
+            chat.assert_called_once()
+            self.assertFalse(json.loads(chat.call_args.kwargs["messages"][1]["content"])["source_link_available"])
+            instruction = chat.call_args.kwargs["messages"][0]["content"]
+            self.assertIn("return exactly 'Full lecture in description.'", instruction)
+            self.assertIn("suggest the CTA yourself", instruction)
+            validate_storyboard(draft, self.generation_clips())
+        with patch("pipeline.storyboard.request_text", return_value={"message": {"content": json.dumps(self.generated_response())}}):
+            suggested = generate_storyboard("model", self.generation_clips(), "Kids", self.LECTURE_URL)
+        self.assertEqual(suggested["ending"]["cta"], "Test one assumption in your next example.")
 
     def test_generated_joins_cannot_silently_omit_transition_frames(self):
         result = self.generated_response()
@@ -976,10 +1028,6 @@ class StoryboardTests(unittest.TestCase):
             changed = app.invalidate_package_storyboard(result[0])
             self.assertIsNone(changed[0]["storyboard_preview_revision"])
             self.assertIsNone(changed[2])
-        demo = app.build_app()
-        labels = [component.get("props", {}).get("label") for component in demo.config["components"]]
-        self.assertIn("Storyboard reviewer name", labels)
-        self.assertIn("Storyboard source evidence", labels)
 
     def clips(self):
         return [{"id": f"c{index}", "start": index * 10, "end": index * 10 + 8,
@@ -1901,19 +1949,6 @@ class AssessmentTests(unittest.TestCase):
             destination = assess_export(export_dir, review)
             result = json.loads((destination / "assessment.json").read_text())
             self.assertEqual(result["selection_context"]["target_audience"], "General public")
-
-    def test_assessment_tab_builds(self):
-        demo = app.build_app()
-        config = demo.get_config_file()
-        labels = [component["props"].get("label") for component in config["components"]]
-        self.assertIn("5. Assessment", labels)
-        self.assertNotIn("Source fidelity (25%)", labels)
-        self.assertNotIn("Human final review", labels)
-        self.assertNotIn("Reviewer name (new human assessment)", labels)
-        self.assertTrue(any(component["props"].get("value") == "Re-run checks" for component in config["components"]))
-        self.assertIn("Target audience", labels)
-        self.assertNotIn("Teaching topic", labels)
-        self.assertFalse(any(label and label.startswith("Learning objectives") for label in labels))
 
 
 if __name__ == "__main__":

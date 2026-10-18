@@ -5,15 +5,35 @@ import re
 from pathlib import Path
 
 from pipeline.assemble import _display_font, _load_fonts, _star, _wrap_to_pixel_width
-from pipeline.utils import ffmpeg_bin, run_cmd
+from pipeline.utils import ffmpeg_bin, run_cmd, short_url
 
 MIN_HOLD = 0.8
+DEFAULT_CREDIT = "Source lecture"  # the storyboard's default credit; a link replaces it, an edited credit stays
 LINE_SPACING = 4
 TYPE_RATIO = {"divider": 0.075, "ending": 0.06}  # starting type size as a share of the short side; fitting shrinks it
 PORTRAIT_ANCHOR = 0.58  # block centre as a share of height on 9:16
 PORTRAIT_SAFE_BOTTOM = 0.85  # keep text above the app UI zone when it fits
 DRIFT_SPAN = 0.7
 WORD_REVEAL_MAX_WORDS = 8  # longer blocks reveal by line; word-by-word is for short titles
+OPENING_BEGIN = 0.1  # text starts once the scrim band is nearly open
+SCRIM_OPEN_SECONDS = 0.35
+EXIT_SECONDS = 0.3  # opening effects fade and the scrim closes together while a swoosh crosses the frame
+PULSE_SECONDS = 0.5
+# Opening-only effects: slow push-in on the artwork, rising motes, one light sweep, scrim that opens, accent underline.
+OPENING_FX = {
+    "Researcher": {"zoom": 1.05, "ease": "quad", "reveal": "line", "sweep": ((190, 235, 235), 46), "wash": ((87, 204, 190), 70),
+                   "flash": ((205, 240, 235), 0.28), "swell": 0.04,
+                   "motes": {"count": 16, "size": (0.0035, 0.007), "alpha": (70, 120), "blur": 0.0, "shape": "dot",
+                             "colors": [(87, 204, 190), (255, 255, 255)]}},
+    "General public": {"zoom": 1.10, "ease": "back", "reveal": "word", "sweep": ((255, 236, 224), 70), "wash": ((255, 133, 107), 105),
+                       "flash": ((255, 255, 255), 0.45), "swell": 0.10,
+                       "motes": {"count": 12, "size": (0.012, 0.032), "alpha": (60, 110), "blur": 0.006, "shape": "dot",
+                                 "colors": [(255, 133, 107), (255, 255, 255), (120, 220, 210)]}},
+    "Kids": {"zoom": 1.12, "ease": "back", "reveal": "word", "sweep": ((255, 255, 255), 90), "wash": ((255, 140, 170), 110),
+             "flash": ((255, 255, 255), 0.5), "swell": 0.12,
+             "motes": {"count": 14, "size": (0.014, 0.03), "alpha": (190, 235), "blur": 0.0, "shape": "star",
+                       "colors": [(255, 213, 75), (255, 140, 170), (90, 170, 255)]}},
+}
 
 
 def _presentation(audience: str) -> dict:
@@ -27,7 +47,10 @@ def card_look(audience: str) -> dict:
 
 def card_motion(audience: str, kind: str | None = None) -> dict:
     motion = _presentation(audience)["motion"]
-    if kind in {"opening", "divider"}:
+    if kind == "opening":
+        fx = OPENING_FX.get(audience, OPENING_FX["General public"])
+        return {**motion, "zoom": fx["zoom"], "fade": 0.28, "slide": 0.04, "ease": fx["ease"], "reveal": fx["reveal"]}
+    if kind == "divider":
         return {**motion, "zoom": 1.0, "fade": 0.3, "slide": 0.008, "ease": "quad",
                 "drift": False, "reveal": "block"}
     return motion
@@ -107,14 +130,22 @@ def card_beats(kind: str, storyboard: dict, kickers: dict, *, number: int = 1, n
         else:
             second = [(action, "kicker", False), (ending["question"], "title", False), (ending["cta"], "question", narration)]
         beats = [[(kickers["ending"], "kicker", False), (ending["takeaway"], "title", narration)], second]
-        corner = [ending.get("credit") or "", *label]
+        link = short_url(storyboard.get("source_url") or "")
+        if link:
+            second.append((link, "link", False))
+        credit = ending.get("credit") or ""
+        site = short_url(storyboard.get("source_url") or "", 24, host_only=True)
+        if site and credit in {"", DEFAULT_CREDIT}:
+            credit = f"Source: {site}"
+        corner = [credit, *label]
     beats = [[section for section in beat if section[0].strip()] for beat in beats]
     return beats, [line for line in corner if line.strip()]
 
 
 def _role_styles(audience: str, opening: bool) -> dict:
     look = card_look(audience)
-    roles = {"title": (1.35, look["ink"]), "body": (1.0, look["body"]), "question": (1.0, look["accent_text"])}
+    roles = {"title": (1.35, look["ink"]), "body": (1.0, look["body"]), "question": (1.0, look["accent_text"]),
+             "link": (0.8, look["accent_text"])}
     if opening:
         roles.update(title=(1.6, look["ink"]), body=(0.75, look["opening_body"]))
     if audience == "Kids":
@@ -283,6 +314,246 @@ def render_text_scrim(layout: dict):
     return layer
 
 
+def _effect(png: Path, start: float, **fx) -> dict:
+    return {"png": png, "start": start, "end": None, "slide": False, "decor": True, "fx": fx}
+
+
+def opening_effects(layout: dict, work: Path, name: str, seconds: float) -> list[dict]:
+    """Layers behind the opening text: rising motes, a scrim that opens from its centre line, one light sweep."""
+    import random
+    import zlib
+
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFilter
+
+    width, height, audience = layout["width"], layout["height"], layout["audience"]
+    style = OPENING_FX.get(audience, OPENING_FX["General public"])
+    unit, motes = min(width, height), style["motes"]
+    rng = random.Random(zlib.crc32(f"{audience}:{width}x{height}".encode()))
+    canvas = Image.new("RGBA", (width, height * 2), (0, 0, 0, 0))  # twice the frame so the rise never exposes an edge
+    draw = ImageDraw.Draw(canvas)
+    for _ in range(motes["count"]):
+        x, y, radius = rng.uniform(0.03, 0.97) * width, rng.uniform(0, 2) * height, unit * rng.uniform(*motes["size"])
+        fill = (*rng.choice(motes["colors"]), rng.randint(*motes["alpha"]))
+        if motes["shape"] == "star":
+            draw.polygon(_star(x, y, radius), fill=fill)
+        else:
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=fill)
+    if motes["blur"]:
+        canvas = canvas.filter(ImageFilter.GaussianBlur(unit * motes["blur"]))
+    layers = []
+    path = work / f"{name}_motes.png"
+    canvas.save(path)
+    layers.append(_effect(path, 0.0, kind="float", x=0, y=round(-0.35 * height), dy=round(-0.4 * height),
+                          seconds=seconds, fade_in=0.5))
+
+    colour, peak = style["wash"]  # a large soft colour glow drifting sideways behind the scrim
+    side = round(max(width, height) * 1.1)
+    columns, rows = np.meshgrid(np.arange(side), np.arange(side))
+    falloff = np.exp(-(((columns - side / 2) ** 2 + (rows - side / 2) ** 2) / (side * 0.28) ** 2))
+    wash = np.dstack([np.full((side, side, 3), colour, dtype="uint8"), (peak * falloff).astype("uint8")])
+    path = work / f"{name}_wash.png"
+    Image.fromarray(wash, "RGBA").save(path)
+    layers.append(_effect(path, 0.0, kind="float", x=round(-0.2 * side), y=round(-0.3 * side), dx=round(0.45 * width),
+                          dy=0, seconds=seconds, fade_in=0.7))
+
+    band = render_text_scrim(layout)
+    box = band.getchannel("A").point(lambda value: 255 if value else 0).getbbox()
+    if box:
+        path = work / f"{name}_scrim.png"
+        band.crop((0, box[1], width, box[3])).save(path)
+        layers.append(_effect(path, 0.0, kind="open", x=0, cy=(box[1] + box[3]) / 2, seconds=SCRIM_OPEN_SECONDS))
+
+    sweep_w = round(width * 0.45)
+    columns, rows = np.meshgrid(np.arange(sweep_w), np.arange(height))
+    lean = (columns - sweep_w / 2) - 0.35 * (rows - height / 2)
+    colour, peak = style["sweep"]
+    alpha = (peak * np.exp(-(lean / (sweep_w * 0.11)) ** 2)).astype("uint8")
+    pixels = np.dstack([np.full((height, sweep_w, 3), colour, dtype="uint8"), alpha])
+    path = work / f"{name}_sweep.png"
+    Image.fromarray(pixels, "RGBA").save(path)
+    layers += opening_motif(layout, work, name) + opening_rules(layout, work, name, seconds)
+    layers.append(_effect(path, 0.25, kind="slide", x=width, y=0, dx=-(width + sweep_w), dy=0, seconds=1.1))
+    flash_colour, flash_peak = style["flash"]  # a camera-flash punch on the first frames
+    path = work / f"{name}_flash.png"
+    Image.new("RGBA", (64, 36), (*flash_colour, 255)).save(path)
+    layers.append(_effect(path, 0.0, kind="flash", peak=flash_peak, seconds=0.25))
+    for layer in layers:
+        if layer["fx"]["kind"] == "open":
+            layer["fx"]["close"] = seconds - EXIT_SECONDS
+        else:
+            layer["fx"]["out"] = seconds - EXIT_SECONDS
+    return layers
+
+
+def opening_exit(layout: dict, work: Path, name: str, seconds: float) -> dict:
+    """A slanted accent swoosh that crosses the frame as the opening clears, ending just before the cut."""
+    import numpy as np
+    from PIL import Image
+
+    width, height = layout["width"], layout["height"]
+    side = round(width * 0.45)
+    columns, rows = np.meshgrid(np.arange(side), np.arange(height))
+    lean = np.abs((columns - side / 2) - 0.35 * (rows - height / 2))
+    alpha = (235 * np.clip((side * 0.22 - lean) / 4, 0, 1)).astype("uint8")
+    pixels = np.dstack([np.full((height, side, 3), layout["look"]["accent_text"], dtype="uint8"), alpha])
+    path = work / f"{name}_swoosh.png"
+    Image.fromarray(pixels, "RGBA").save(path)
+    return _effect(path, seconds - EXIT_SECONDS - 0.2, kind="slide", x=width, y=0, dx=-(width + side), dy=0,
+                   seconds=EXIT_SECONDS + 0.15, exit=True)
+
+
+def word_slam(layout: dict, step: tuple, work: Path, name: str, start: float, index: int, exit_at: float) -> dict:
+    """One title word as its own cropped layer that lands from 1.55x with a slight overshoot."""
+    block = layout["blocks"][step[1]]
+    line, first, last = step[2:5]
+    text, font = block["lines"][line], block["font"]
+    left = block["x"][line] + font.getlength(text[:first])
+    top = block["y"] + line * (block["advance"] + LINE_SPACING)
+    pad = round(layout["size"] * 0.25)
+    box = (max(0, round(left) - pad), max(0, top - pad),
+           min(layout["width"], round(left + font.getlength(text[first:last])) + pad), min(layout["height"], top + block["advance"] + pad))
+    path = work / f"{name}_{index:02d}.png"
+    render_layer(layout, [step]).crop(box).save(path)
+    return {"png": path, "start": start, "end": exit_at + EXIT_SECONDS - 0.1, "slide": True,
+            "fx": {"kind": "slam", "cx": (box[0] + box[2]) / 2, "cy": (box[1] + box[3]) / 2, "seconds": 0.35,
+                   "out": exit_at}}
+
+
+def accent_pulse(layout: dict, work: Path, name: str, start: float) -> dict | None:
+    """The accent word alone, swelling once above its own text so the word itself animates."""
+    from PIL import Image, ImageDraw
+
+    box = accent_box(layout)
+    if box is None:
+        return None
+    block = layout["blocks"][box["block"]]
+    line, first, last = block["accent_span"]
+    image = Image.new("RGBA", (box["width"] + 4, box["height"]), (0, 0, 0, 0))
+    ImageDraw.Draw(image).text((2, 0), block["lines"][line][first:last], font=block["font"],
+                               fill=(*layout["look"]["accent_text"], 255))
+    path = work / f"{name}_pulse.png"
+    image.save(path)
+    return _effect(path, start, kind="pulse", cx=box["left"] + box["width"] / 2, cy=box["top"] + box["height"] / 2,
+                   seconds=PULSE_SECONDS, amp=OPENING_FX.get(layout["audience"], OPENING_FX["General public"])["swell"])
+
+
+def opening_rules(layout: dict, work: Path, name: str, seconds: float) -> list[dict]:
+    """Accent rules above and below the text: the top one wipes in fast, the bottom one fills as a progress line."""
+    from PIL import Image, ImageDraw
+
+    width, height, size = layout["width"], layout["height"], layout["size"]
+    tops = ([layout["chip"]["row_y"]] if layout["chip"] else []) + [block["y"] for block in layout["blocks"]]
+    bottom = max(block["y"] + block["height"] for block in layout["blocks"])
+    thick, span = max(3, round(min(width, height) * 0.005)), width - 2 * layout["padding"]
+    layers = []
+    for tag, y, start, wipe, ease in (("top", min(tops) - max(8, round(size * 0.3)), 0.1, 0.5, None),
+                                      ("bottom", bottom + max(8, round(size * 0.3)), 0.2, seconds * 0.9, "linear")):
+        image = Image.new("RGBA", (span, thick), (0, 0, 0, 0))
+        ImageDraw.Draw(image).rounded_rectangle((0, 0, span - 1, thick - 1), radius=thick // 2,
+                                                fill=(*layout["look"]["accent_text"], 235))
+        path = work / f"{name}_rule_{tag}.png"
+        image.save(path)
+        layers.append(_effect(path, start, kind="grow", x=layout["padding"], y=y, seconds=wipe, **({"ease": ease} if ease else {})))
+    return layers
+
+
+def opening_motif(layout: dict, work: Path, name: str) -> list[dict]:
+    """One audience motif in the free artwork area: a drawn data line, a corner wedge or popping stars."""
+    import random
+    import zlib
+
+    from PIL import Image, ImageDraw, ImageFilter
+
+    width, height, audience = layout["width"], layout["height"], layout["audience"]
+    if audience == "Kids":
+        return [{**item, "start": 0.15 + 0.1 * index} for index, item in
+                enumerate(layer for layer in decor_layers(audience, width, height, work, name, 0.4)
+                          if layer["fx"]["kind"] == "pop" and layer["fx"]["cy"] < height * 0.25)]
+    if audience == "General public":
+        return [{**item, "start": 0.15} for item in decor_layers(audience, width, height, work, name, 0.45)
+                if item["fx"]["kind"] == "slide" and item["fx"]["y"] == 0]
+    portrait = height > width
+    left, top = round(width * (0.1 if portrait else 0.08)), round(height * (0.06 if portrait else 0.08))
+    span, rise = round(width * (0.8 if portrait else 0.42)), round(height * (0.14 if portrait else 0.2))
+    thick, scale = max(3, round(min(width, height) * 0.007)), 3
+    rng = random.Random(zlib.crc32(f"{audience}:curve".encode()))
+    count = 14
+    points = [(index / (count - 1) * (span - thick * 4) + thick * 2,
+               rise * (1 - 0.8 * (index / (count - 1)) ** 1.3 - rng.uniform(-0.06, 0.06)) - thick * 2)
+              for index in range(count)]
+    colour = layout["look"]["accent_text"]
+    canvas = Image.new("RGBA", (span * scale, rise * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    draw.line([(0, rise * scale - thick * scale), (span * scale, rise * scale - thick * scale)], fill=(*colour, 80), width=scale)
+    glow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    scaled = [(x * scale, y * scale) for x, y in points]
+    ImageDraw.Draw(glow).line(scaled, fill=(*colour, 200), width=thick * scale * 3, joint="curve")
+    draw.line(scaled, fill=(*colour, 255), width=thick * scale, joint="curve")
+    end_x, end_y, radius = *scaled[-1], thick * scale * 1.8
+    draw.ellipse((end_x - radius, end_y - radius, end_x + radius, end_y + radius), fill=(255, 255, 255, 255))
+    image = Image.alpha_composite(glow.filter(ImageFilter.GaussianBlur(thick * scale)), canvas).resize((span, rise), Image.LANCZOS)
+    path = work / f"{name}_curve.png"
+    image.save(path)
+    return [_effect(path, 0.5, kind="grow", x=left, y=top, seconds=1.2)]
+
+
+def accent_box(layout: dict) -> dict | None:
+    """Pixel box of the title's accent word, with the block and character span it came from."""
+    index, block = next(((i, item) for i, item in enumerate(layout["blocks"])
+                         if item["role"] == "title" and item["accent_span"]), (None, None))
+    if block is None:
+        return None
+    line, first, last = block["accent_span"]
+    text, font = block["lines"][line], block["font"]
+    return {"block": index, "line": line, "first": first,
+            "left": block["x"][line] + font.getlength(text[:first]),
+            "width": max(2, round(font.getlength(text[first:last]))),
+            "top": block["y"] + line * (block["advance"] + LINE_SPACING), "height": block["advance"]}
+
+
+def accent_moment(timed: list[tuple[float, tuple]], box: dict) -> float:
+    """When the accent word reaches the screen: its own word step, else its line, else the whole title."""
+    steps = [(moment, step) for moment, step in timed if step[0] != "chip" and step[1] == box["block"]]
+    exact = [moment for moment, step in steps if step[0] == "word" and step[2:4] == (box["line"], box["first"])]
+    same_line = [moment for moment, step in steps if step[0] == "line" and step[2] == box["line"]]
+    return (exact or same_line or [max(moment for moment, _ in steps)])[0]
+
+
+def accent_glow(layout: dict, work: Path, name: str, start: float) -> dict | None:
+    """A soft accent-coloured pad that pops in behind the accent word."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    box = accent_box(layout)
+    if box is None:
+        return None
+    pad = round(layout["size"] * 0.4)
+    width, height = box["width"] + 2 * pad, box["height"] + 2 * pad
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rounded_rectangle((pad * 0.6, pad * 0.6, width - pad * 0.6, height - pad * 0.6),
+                                            radius=height // 3, fill=(*layout["look"]["accent_text"], 70))
+    path = work / f"{name}_glow.png"
+    image.filter(ImageFilter.GaussianBlur(pad * 0.5)).save(path)
+    return _effect(path, start, kind="pop", cx=box["left"] + box["width"] / 2, cy=box["top"] + box["height"] / 2,
+                   seconds=0.45)
+
+
+def accent_underline(layout: dict, work: Path, name: str, start: float) -> dict | None:
+    """A bar that wipes in under the title's accent word once the word is on screen."""
+    from PIL import Image, ImageDraw
+
+    box = accent_box(layout)
+    if box is None:
+        return None
+    thick = max(3, round(layout["size"] * 0.09))
+    image = Image.new("RGBA", (box["width"], thick), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rounded_rectangle((0, 0, box["width"] - 1, thick - 1), radius=thick // 2,
+                                            fill=(*layout["look"]["accent_text"], 255))
+    path = work / f"{name}_underline.png"
+    image.save(path)
+    return _effect(path, start, kind="grow", x=round(box["left"]), y=round(box["top"] + box["height"] * 0.94), seconds=0.35)
+
+
 def decor_layers(audience: str, width: int, height: int, work: Path, name: str, seconds: float) -> list[dict]:
     """Per-audience decor as small separate layers with their own entrance: rules wipe, wedges slide, stars pop."""
     from PIL import Image, ImageDraw
@@ -335,6 +606,13 @@ def render_layer(layout: dict, steps: list[tuple]):
     layer = Image.new("RGBA", (layout["width"], layout["height"]), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     look = layout["look"]
+    shadow = max(2, round(layout["size"] * 0.04)) if layout["opening"] and sum(look["scrim"]) < 384 else 0
+
+    def put(x, y, text, font, color):
+        if shadow:
+            draw.text((x + shadow, y + shadow), text, font=font, fill=(0, 0, 0, 120))
+        draw.text((x, y), text, font=font, fill=(*color, 255))
+
     for step in steps:
         if step[0] == "chip":
             chip = layout["chip"]
@@ -358,15 +636,15 @@ def render_layer(layout: dict, steps: list[tuple]):
             if step[0] == "word":
                 first, last = step[3], step[4]
                 marked = span == (line, first, last)
-                draw.text((x + draw.textlength(text[:first], font=font), y), text[first:last], font=font,
-                          fill=(*(look["accent_text"] if marked else block["color"]), 255))
+                put(x + draw.textlength(text[:first], font=font), y, text[first:last], font,
+                    look["accent_text"] if marked else block["color"])
             elif span and span[0] == line:
                 for part, color in ((text[:span[1]], block["color"]), (text[span[1]:span[2]], look["accent_text"]),
                                     (text[span[2]:], block["color"])):
-                    draw.text((x, y), part, font=font, fill=(*color, 255))
+                    put(x, y, part, font, color)
                     x += draw.textlength(part, font=font)
             else:
-                draw.text((x, y), text, font=font, fill=(*block["color"], 255))
+                put(x, y, text, font, block["color"])
     return layer
 
 
@@ -475,9 +753,12 @@ def build_card(kind: str, storyboard: dict, kickers: dict, work: Path, name: str
         switch = min(max(split + 0.15, 1.3), max(1.3, duration - 1.5))
         windows = [(0.0, switch, speech_from, split), (switch, duration, split, speech_to)]
     else:
-        windows = [(0.0, duration, speech_from, speech_to)]
+        windows = [(OPENING_BEGIN if opening else 0.0, duration, speech_from, speech_to)]
     layers = []
-    if focused:
+    behind = []
+    if opening:
+        behind = opening_effects(layouts[0], work, name, duration)
+    elif focused:
         png = work / f"{name}_scrim.png"
         render_text_scrim(layouts[0]).save(png)
         layers.append({"png": png, "start": 0.0, "end": None, "slide": False, "static": True})
@@ -489,10 +770,28 @@ def build_card(kind: str, storyboard: dict, kickers: dict, work: Path, name: str
         for moment, step in sorted(timed, key=lambda item: item[0]):
             grouped.setdefault(round(moment, 2), []).append(step)
         for moment, steps in grouped.items():
-            png = work / f"{name}_{len(layers):02d}.png"
-            render_layer(layout, steps).save(png)
-            layers.append({"png": png, "start": moment, "end": end if len(layouts) == 2 and begin == 0.0 else None,
-                           "slide": True})
+            slams = [step for step in steps if opening and step[0] == "word"]
+            steps = [step for step in steps if step not in slams]
+            if steps:
+                png = work / f"{name}_{len(layers):02d}.png"
+                render_layer(layout, steps).save(png)
+                layers.append({"png": png, "start": moment,
+                               "end": (duration - 0.1 if opening else end if len(layouts) == 2 and begin == 0.0 else None),
+                               "slide": True})
+            for step in slams:
+                layers.append(word_slam(layout, step, work, name, moment, len(layers), duration - EXIT_SECONDS))
+        if opening and (box := accent_box(layout)):
+            moment = accent_moment(timed, box)
+            behind.append(accent_glow(layout, work, name, moment))
+            layers.append(accent_underline(layout, work, name, min(moment + 0.25, end - 0.6)))
+            pulse_at = max(moment + 0.1, min(moment + 0.3, duration - EXIT_SECONDS - PULSE_SECONDS))
+            layers.append(accent_pulse(layout, work, name, pulse_at))
+    if opening:
+        for layer in (*behind, *layers):
+            if layer.get("fx") and layer["fx"]["kind"] in {"pop", "grow"} and "out" not in layer["fx"]:
+                layer["fx"]["out"] = duration - EXIT_SECONDS
+        layers.append(opening_exit(layouts[0], work, name, duration))
+    layers = behind + layers
     if corner:
         png = work / f"{name}_corner.png"
         render_corner(corner, width, height, audience).save(png)
@@ -515,6 +814,9 @@ def animated_card_video(background: Path, layers: list[dict], dest: Path, width:
         command += ["-loop", "1", "-framerate", str(fps), "-t", f"{seconds:.3f}", "-i", str(source)]
     command += ["-i", str(audio)] if audio is not None else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
     audio_index = len(layers) + 1
+    sting = opening_sting(layers, dest, seconds) if kind == "opening" else None
+    if sting:
+        command += ["-i", str(sting)]
     zoom = (f"scale={width * 2}:{height * 2},zoompan=z='1+{motion['zoom'] - 1:.3f}*{_ease(ease, f'min(on/{frames},1)')}':"
             f"x='{pan}':y='(ih-ih/zoom)/2':d=1:s={width}x{height}:fps={fps},format=yuv420p")
     filters = [f"[0:v]{zoom}[v0]"]
@@ -525,15 +827,39 @@ def animated_card_video(background: Path, layers: list[dict], dest: Path, width:
             filters.append(f"[v{index - 1}][l{index}]overlay=x=0:y=0[v{index}]")
             continue
         if fx:
-            eased = _ease(ease, f"clip((t-{start:.3f})/{fx['seconds']:.3f},0,1)")
+            eased = _ease(fx.get("ease", ease), f"clip((t-{start:.3f})/{fx['seconds']:.3f},0,1)")
+            out = f",fade=t=out:st={fx['out']:.3f}:d={EXIT_SECONDS}:alpha=1" if fx.get("out") is not None else ""
             if fx["kind"] == "slide":
-                filters.append(f"[{index}:v]format=rgba[l{index}]")
+                filters.append(f"[{index}:v]format=rgba{out}[l{index}]")
                 overlay = f"overlay=x='{fx['x']}+({fx['dx']})*(1-{eased})':y='{fx['y']}+({fx['dy']})*(1-{eased})'"
             elif fx["kind"] == "grow":
-                filters.append(f"[{index}:v]format=rgba,scale=w='max(2,iw*{eased})':h=ih:eval=frame[l{index}]")
+                filters.append(f"[{index}:v]format=rgba{out},scale=w='max(2,iw*{eased})':h=ih:eval=frame[l{index}]")
                 overlay = f"overlay=x={fx['x']}:y={fx['y']}:enable='gte(t,{start:.3f})'"
+            elif fx["kind"] == "open":
+                closing = f"*(1-clip((t-{fx['close']:.3f})/{EXIT_SECONDS},0,1))" if fx.get("close") is not None else ""
+                fading = f",fade=t=out:st={fx['close']:.3f}:d={EXIT_SECONDS}:alpha=1" if fx.get("close") is not None else ""
+                filters.append(f"[{index}:v]format=rgba{fading},scale=w=iw:h='max(2,ih*{eased}{closing})':eval=frame[l{index}]")
+                overlay = f"overlay=x={fx['x']}:y='{fx['cy']:.1f}-h/2'"
+            elif fx["kind"] == "float":
+                filters.append(f"[{index}:v]format=rgba,fade=t=in:st={start:.3f}:d={fx['fade_in']}:alpha=1{out}[l{index}]")
+                overlay = (f"overlay=x='{fx['x']}+({fx.get('dx', 0)})*min(t/{fx['seconds']:.3f},1)':"
+                           f"y='{fx['y']}+({fx['dy']})*min(t/{fx['seconds']:.3f},1)'")
+            elif fx["kind"] == "slam":
+                grow = f"(1+0.55*(1-{eased}))"
+                filters.append(f"[{index}:v]format=rgba,fade=t=in:st={start:.3f}:d=0.18:alpha=1{out},"
+                               f"scale=w='iw*{grow}':h='ih*{grow}':eval=frame[l{index}]")
+                overlay = f"overlay=x='{fx['cx']:.1f}-w/2':y='{fx['cy']:.1f}-h/2':enable='gte(t,{start:.3f})'"
+            elif fx["kind"] == "flash":
+                filters.append(f"[{index}:v]scale={width}:{height},format=rgba,colorchannelmixer=aa={fx['peak']},"
+                               f"fade=t=out:st=0:d={fx['seconds']}:alpha=1[l{index}]")
+                overlay = "overlay=x=0:y=0"
+            elif fx["kind"] == "pulse":
+                swell = f"(1+{fx['amp']}*sin(PI*clip((t-{start:.3f})/{fx['seconds']:.3f},0,1)))"
+                filters.append(f"[{index}:v]format=rgba,scale=w='iw*{swell}':h='ih*{swell}':eval=frame[l{index}]")
+                overlay = (f"overlay=x='{fx['cx']:.1f}-w/2':y='{fx['cy']:.1f}-h/2':"
+                           f"enable='between(t,{start:.3f},{start + fx['seconds']:.3f})'")
             else:
-                filters.append(f"[{index}:v]format=rgba,scale=w='max(2,iw*{eased})':h='max(2,ih*{eased})':eval=frame[l{index}]")
+                filters.append(f"[{index}:v]format=rgba{out},scale=w='max(2,iw*{eased})':h='max(2,ih*{eased})':eval=frame[l{index}]")
                 overlay = f"overlay=x='{fx['cx']:.1f}-w/2':y='{fx['cy']:.1f}-h/2':enable='gte(t,{start:.3f})'"
             filters.append(f"[v{index - 1}][l{index}]{overlay}[v{index}]")
             continue
@@ -546,10 +872,65 @@ def animated_card_video(background: Path, layers: list[dict], dest: Path, width:
                   f"{shift}*(1-{slide}),0))'") if layer["slide"] else "y=0"
         filters.append(f"[v{index - 1}][l{index}]overlay=x=0:{offset}[v{index}]")
     filters.append(f"[v{len(layers)}]format=yuv420p,setsar=1[vout]")
-    command += ["-filter_complex", ";".join(filters), "-map", "[vout]", "-map", f"{audio_index}:a"]
-    if audio is not None:
-        command += ["-af", "adelay=150:all=1,apad"]
+    if sting:
+        stereo = "aresample=44100,aformat=channel_layouts=stereo"
+        voice = f"adelay=150:all=1,apad,{stereo}" if audio is not None else stereo
+        filters.append(f"[{audio_index}:a]{voice}[voice];[{audio_index + 1}:a]apad,{stereo}[sting];"
+                       "[voice][sting]amix=inputs=2:normalize=0:duration=longest,alimiter=limit=0.89[aout]")
+        command += ["-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]"]
+    else:
+        command += ["-filter_complex", ";".join(filters), "-map", "[vout]", "-map", f"{audio_index}:a"]
+        if audio is not None:
+            command += ["-af", "adelay=150:all=1,apad"]
     command += ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100",
                 "-ac", "2", "-t", f"{seconds:.2f}", "-shortest", str(dest)]
     run_cmd(command)
+    return dest
+
+
+def opening_sting(layers: list[dict], dest: Path, seconds: float) -> Path | None:
+    """Synthesised hit, accent chime and exit whoosh timed to the opening's flash, pulse and swoosh layers."""
+    import wave
+
+    import numpy as np
+
+    rate = 44100
+    fx = [layer["fx"] | {"start": layer["start"]} for layer in layers if layer.get("fx")]
+    flash = next((item for item in fx if item["kind"] == "flash"), None)
+    if flash is None:
+        return None
+    track = np.zeros(round(seconds * rate) + rate)
+    rng = np.random.default_rng(7)
+
+    def add(at: float, sound):
+        begin = round(at * rate)
+        end = min(len(track), begin + len(sound))
+        if begin < end:
+            track[begin:end] += sound[: end - begin]
+
+    t = np.arange(round(0.45 * rate)) / rate
+    add(flash["start"], 0.32 * np.sin(2 * np.pi * (48 + 40 * np.exp(-t * 18)) * t) * np.exp(-t * 11)
+        + 0.08 * rng.standard_normal(len(t)) * np.exp(-t * 90))
+    for item in fx:
+        if item["kind"] == "pulse":
+            t = np.arange(round(0.5 * rate)) / rate
+            add(item["start"], 0.07 * (np.sin(2 * np.pi * 1568 * t) + 0.5 * np.sin(2 * np.pi * 2352 * t)) * np.exp(-t * 8))
+        if item.get("exit"):
+            length = round((item["seconds"] + 0.1) * rate)
+            t = np.arange(length) / rate
+            envelope = np.sin(np.pi * np.clip(t / t[-1], 0, 1)) ** 2
+            noise = rng.standard_normal(length)
+            smooth = np.zeros(length)
+            level = 0.0
+            for index, sample in enumerate(noise):  # one-pole low-pass that opens as the swoosh crosses
+                level += (0.04 + 0.5 * index / length) * (sample - level)
+                smooth[index] = level
+            add(item["start"], 0.3 * envelope * smooth)
+    track = np.clip(track[: round(seconds * rate)], -1, 1)
+    dest = Path(dest).with_suffix(".sting.wav")
+    with wave.open(str(dest), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes((track * 32767).astype("<i2").tobytes())
     return dest

@@ -76,6 +76,7 @@ def export_clips(
     selection_context: dict | None = None,
     storyboard: dict | None = None,
     storyboard_approval: dict | None = None,
+    blueprint: dict | None = None,
 ) -> tuple[list[str], str, Path, str]:
     if not (MIN_KEEP <= len(clips) <= MAX_KEEP):
         raise RuntimeError(f"Keep {MIN_KEEP}–{MAX_KEEP} on-topic clips before export.")
@@ -166,6 +167,7 @@ def export_clips(
                 "selection_context": selection_context or {},
                 "storyboard": storyboard,
                 "storyboard_approval": storyboard_approval,
+                "blueprint": blueprint,
                 "asset_inventory": inventory,
                 "timeline": json.loads((export_work / "assemble" / "timeline.json").read_text(encoding="utf-8")) if storyboard else None,
             },

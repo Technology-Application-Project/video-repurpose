@@ -109,7 +109,6 @@ class AutomaticSelectionAppTests(unittest.TestCase):
 
     def test_candidate_table_marks_the_automatic_choice_and_the_reviewer_sees_what_was_automatic(self):
         result = self.run_nomination([candidate("a", 0, 10), candidate("b", 100, 12)], True)
-        self.assertTrue(app.build_app().config["components"])
         self.assertEqual(result[1].count("automatically"), 1)
         self.assertIn("selected automatically (a, b)", result[3])
         state = result[0]

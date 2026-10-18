@@ -1,1 +1,1 @@
-"""Educational short-clip pipeline for the Gradio MVP."""
+"""Educational short-clip pipeline."""

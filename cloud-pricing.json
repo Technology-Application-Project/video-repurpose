@@ -21,7 +21,7 @@
     "media_price_source": "https://ai.google.dev/gemini-api/docs/pricing (reviewed 2026-10-11; recheck before approval)",
     "image": "Published rates: USD 0.50 per million input tokens, USD 3 per million text/thinking output tokens, and about USD 0.067 per 1K image. Assumes one 1K image per request, rounded to USD 0.10 for prompt/thinking costs. Larger images or token usage can cost more.",
     "music": "Only used when music_source is generated. Published Lyria 3 Clip Preview rate: USD 0.04 per 30-second song. With music_source library (default) music comes from assets/music and costs nothing.",
-    "batch": "4 text requests + 2 images. No video generation. Music is not requested while music_source is library. Request caps are enforced by the app; this is not a billing cap. Pricing remains an operator-accepted unverified estimate.",
+    "batch": "5 text requests (one is the blueprint plan) + 2 images. No video generation. Music is not requested while music_source is library. Request caps are enforced by the app; this is not a billing cap. Pricing remains an operator-accepted unverified estimate.",
     "caveats": "No account access or live generation has been verified. Requires billing and model availability for your account and region. Recheck prices before use; taxes and currency conversion are excluded. Creating this file does not authorize paid requests."
   }
 }

@@ -12,7 +12,7 @@ from pipeline.illustration import LOCAL_PROVIDER
 from pipeline.project import atomic_json, data_hash, file_hash
 
 
-CAPS = {"text": 4, "image": 2, "music": 1}
+CAPS = {"text": 5, "image": 2, "music": 1}
 XERO_PORTKEY_BASE_URL = "https://llm-gateway.xgw.xero-test.com/v1"
 LOCAL_MAX_TOKENS = 12000  # Reasoning tokens count against the limit; scene data alone is small.
 _LOCK = threading.RLock()

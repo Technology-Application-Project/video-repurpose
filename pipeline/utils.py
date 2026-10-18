@@ -103,6 +103,24 @@ def write_srt(segments: list[dict], path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def short_url(url: str, limit: int = 32, host_only: bool = False) -> str:
+    """On-screen form of a source link: no scheme, www, query or fragment; long paths keep their last segment."""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse((url or "").strip())
+        host = parsed.hostname
+    except ValueError:
+        return ""
+    if parsed.scheme not in {"http", "https"} or not host:
+        return ""
+    host = host.removeprefix("www.")
+    path = "" if host_only else parsed.path.rstrip("/")
+    text = host + path
+    if len(text) > limit and path.count("/") > 1:
+        text = f"{host}/.../{path.rsplit('/', 1)[1]}"
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
 def ffmpeg_bin() -> str:
     path = shutil.which("ffmpeg")
     if not path:

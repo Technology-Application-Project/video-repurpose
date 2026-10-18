@@ -355,6 +355,13 @@ def _friendly_value(metric: dict) -> str:
     return _measurement_text(metric)
 
 
+def metric_story(metric: dict) -> dict:
+    """Plain-language fields for one check: what it verifies, what was exported, and what to do if it did not pass."""
+    checks, fix = _GUIDE.get(metric["id"], (metric["label"], ""))
+    return {"checks": checks, "exported": _friendly_value(metric),
+            "fix": fix if fix and metric["status"] in {"fail", "unavailable"} else None}
+
+
 def objective_html(assessment: dict) -> str:
     """Colour-coded summary for the app: overall banner, failures first, plain-language wording."""
     from html import escape
