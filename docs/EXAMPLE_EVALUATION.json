@@ -1,0 +1,125 @@
+{
+  "ranking": [
+    2,
+    1
+  ],
+  "options": [
+    {
+      "option": 1,
+      "warning_count": 3,
+      "overlap_sum": 2.0,
+      "report": {
+        "schema_version": 1,
+        "audience": "General public",
+        "result": "needs_review",
+        "fields": [
+          {
+            "field": "opening.title",
+            "text": "In this video we discuss education",
+            "warnings": [
+              "generic_throat_clearing",
+              "question_hook_required",
+              "weak_lexical_evidence_match"
+            ],
+            "evidence_ids": [
+              "lecture-01"
+            ],
+            "lexical_overlap": 0.0
+          },
+          {
+            "field": "opening.subtitle",
+            "text": "Future skills and jobs",
+            "warnings": [],
+            "evidence_ids": [
+              "lecture-01"
+            ],
+            "lexical_overlap": 1.0
+          },
+          {
+            "field": "ending.takeaway",
+            "text": "Educational investment helps students prepare for future jobs.",
+            "warnings": [],
+            "evidence_ids": [
+              "lecture-01"
+            ],
+            "lexical_overlap": 1.0
+          },
+          {
+            "field": "ending.question",
+            "text": "What skills matter next?",
+            "warnings": [],
+            "evidence_ids": [],
+            "lexical_overlap": null
+          },
+          {
+            "field": "ending.cta",
+            "text": "Full lecture in description.",
+            "warnings": [],
+            "evidence_ids": [],
+            "lexical_overlap": null
+          }
+        ],
+        "timing_warnings": [],
+        "human_review_required": true,
+        "limitations": "Offline rubric and lexical overlap only. Does not establish semantic faithfulness, factual correctness, audience retention, or human approval."
+      }
+    },
+    {
+      "option": 2,
+      "warning_count": 0,
+      "overlap_sum": 2.5,
+      "report": {
+        "schema_version": 1,
+        "audience": "General public",
+        "result": "precheck_pass",
+        "fields": [
+          {
+            "field": "opening.title",
+            "text": "How Can Education Prepare Future Workers?",
+            "warnings": [],
+            "evidence_ids": [
+              "lecture-01"
+            ],
+            "lexical_overlap": 0.5
+          },
+          {
+            "field": "opening.subtitle",
+            "text": "Future skills and jobs",
+            "warnings": [],
+            "evidence_ids": [
+              "lecture-01"
+            ],
+            "lexical_overlap": 1.0
+          },
+          {
+            "field": "ending.takeaway",
+            "text": "Educational investment helps students prepare for future jobs.",
+            "warnings": [],
+            "evidence_ids": [
+              "lecture-01"
+            ],
+            "lexical_overlap": 1.0
+          },
+          {
+            "field": "ending.question",
+            "text": "What skills matter next?",
+            "warnings": [],
+            "evidence_ids": [],
+            "lexical_overlap": null
+          },
+          {
+            "field": "ending.cta",
+            "text": "Full lecture in description.",
+            "warnings": [],
+            "evidence_ids": [],
+            "lexical_overlap": null
+          }
+        ],
+        "timing_warnings": [],
+        "human_review_required": true,
+        "limitations": "Offline rubric and lexical overlap only. Does not establish semantic faithfulness, factual correctness, audience retention, or human approval."
+      }
+    }
+  ],
+  "note": "Heuristic comparison for review; not an automatic content approval."
+}
