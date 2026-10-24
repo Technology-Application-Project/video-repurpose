@@ -34,6 +34,7 @@ import { api, setToken, upload } from "./api";
 import { BlueprintPanel } from "./Blueprint";
 import { MetricList, StructurePanel } from "./Checks";
 import { structureLabel, technicalLabel } from "./checkLabels";
+import { AudienceGuide, PipelineGuide, PrivacyNotice, RubricGuide } from "./Guides";
 import type {
   Clip,
   Config,
@@ -87,7 +88,7 @@ function Studio() {
   const [review, setReview] = useState({ scope: "", reviewer: "", attested: false });
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "evidence">("summary");
-  const [checkTab, setCheckTab] = useState<"technical" | "structure">("technical");
+  const [checkTab, setCheckTab] = useState<"technical" | "structure" | "rubric">("technical");
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const watchedJob = useRef(localStorage.getItem("studio-job") || "");
@@ -838,6 +839,7 @@ function Studio() {
                     ),
                   )}
                 </div>
+                <AudienceGuide audience={options.audience} />
                 <div className="rule" />
                 <label>Output format</label>
                 <div
@@ -959,6 +961,9 @@ function Studio() {
                         })
                       }
                     />
+                    <small className="field-hint">
+                      Left empty, the ending card shows the placeholder example.edu/lecture.
+                    </small>
                   </label>
                 </details>
                 <button
@@ -982,6 +987,10 @@ function Studio() {
                 </div>
               </aside>
             </div>
+            <section className="guide-grid">
+              <PipelineGuide />
+              <PrivacyNotice />
+            </section>
             <section className="recent-section">
               <div className="section-header">
                 <h2>
@@ -1594,6 +1603,7 @@ function Studio() {
                       [
                         ["technical", "Technical check", technicalLabel(detail.assessment)],
                         ["structure", "Structure check", structureLabel(detail.structure)],
+                        ["rubric", "How to judge", "5 criteria"],
                       ] as const
                     ).map(([id, label, state]) => (
                       <button
@@ -1610,6 +1620,8 @@ function Studio() {
                   </div>
                   {checkTab === "structure" ? (
                     <StructurePanel structure={detail.structure} />
+                  ) : checkTab === "rubric" ? (
+                    <RubricGuide audience={detail.audience} />
                   ) : detail.assessment ? (
                     <>
                       <div

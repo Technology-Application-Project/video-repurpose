@@ -9,6 +9,7 @@ from pipeline.utils import ffmpeg_bin, run_cmd, short_url
 
 MIN_HOLD = 0.8
 DEFAULT_CREDIT = "Source lecture"  # the storyboard's default credit; a link replaces it, an edited credit stays
+EXAMPLE_LINK = "example.edu/lecture"  # reserved example domain, shown on the ending card until a real Source URL is entered
 LINE_SPACING = 4
 TYPE_RATIO = {"divider": 0.075, "ending": 0.06}  # starting type size as a share of the short side; fitting shrinks it
 PORTRAIT_ANCHOR = 0.58  # block centre as a share of height on 9:16
@@ -130,9 +131,8 @@ def card_beats(kind: str, storyboard: dict, kickers: dict, *, number: int = 1, n
         else:
             second = [(action, "kicker", False), (ending["question"], "title", False), (ending["cta"], "question", narration)]
         beats = [[(kickers["ending"], "kicker", False), (ending["takeaway"], "title", narration)], second]
-        link = short_url(storyboard.get("source_url") or "")
-        if link:
-            second.append((link, "link", False))
+        link = short_url(storyboard.get("source_url") or "") or EXAMPLE_LINK
+        second.append((link, "link", False))
         credit = ending.get("credit") or ""
         site = short_url(storyboard.get("source_url") or "", 24, host_only=True)
         if site and credit in {"", DEFAULT_CREDIT}:
@@ -145,7 +145,7 @@ def card_beats(kind: str, storyboard: dict, kickers: dict, *, number: int = 1, n
 def _role_styles(audience: str, opening: bool) -> dict:
     look = card_look(audience)
     roles = {"title": (1.35, look["ink"]), "body": (1.0, look["body"]), "question": (1.0, look["accent_text"]),
-             "link": (0.8, look["accent_text"])}
+             "link": (0.8, look["ink"])}
     if opening:
         roles.update(title=(1.6, look["ink"]), body=(0.75, look["opening_body"]))
     if audience == "Kids":

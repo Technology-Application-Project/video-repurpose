@@ -116,6 +116,10 @@ test('export tab shows both the technical check and the structure check with the
   await follow.getByText('Compare the wording').click();
   await expect(page.getByText('Ask why similar nations differ')).toBeVisible();
   await expect(page.getByText('How does idea 1 connect?')).toBeVisible();
+  await page.getByRole('tab', { name: /How to judge/ }).click();
+  await expect(page.getByText('Source fidelity')).toBeVisible();
+  await expect(page.getByText('For Kids, also check')).toBeVisible();
+  await expect(page.getByText('Every row scores at least 3 of 4')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run technical check' })).toBeVisible();
   await overflow(page);
   await page.screenshot({ path: info.outputPath('structure-check.png'), fullPage: true });
@@ -244,5 +248,24 @@ test('source to export interaction, all generation and mutations mocked', async 
   expect(calls.filter(path => path.endsWith('/preview'))).toHaveLength(1);
   expect(calls.filter(path => path.endsWith('/exports'))).toHaveLength(1);
   expect(calls.some(path => path.endsWith('/selection'))).toBe(true);
+  expect(errors).toEqual([]);
+});
+test('source screen explains the pipeline, privacy and each audience profile', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/api/**', async route => {
+    if (route.request().method() !== 'GET') throw new Error('No mutations allowed in the guides test');
+    return route.continue();
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'How Brevio works' })).toBeVisible();
+  await expect(page.getByText('Never sent:')).toBeVisible();
+  await expect(page.getByText('Stays on this computer')).toBeVisible();
+  for (const [name, voice] of [['Researcher', 'Michael'], ['General public', 'Heart'], ['Kids', 'Sky']]) {
+    await page.getByRole('radio', { name }).click();
+    await expect(page.getByText(`What ${name} gets`)).toBeVisible();
+    await expect(page.locator('.audience-guide')).toContainText(voice);
+  }
+  await overflow(page);
   expect(errors).toEqual([]);
 });

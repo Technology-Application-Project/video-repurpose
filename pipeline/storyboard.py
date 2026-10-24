@@ -10,7 +10,7 @@ from pipeline.kokoro_tts import cache_identity
 
 
 STORYBOARD_VERSION = "2.0"
-CARD_RENDER_VERSION = "2.2"
+CARD_RENDER_VERSION = "2.3"
 FIXED_CTA = "Full lecture in description."  # used whenever no source URL is given
 DURATION_BUDGET = {"min_seconds": 30, "max_seconds": 60}
 PREVIOUS_DURATION_BUDGET = {"min_seconds": 60, "max_seconds": 90}

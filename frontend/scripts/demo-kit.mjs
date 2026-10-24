@@ -55,10 +55,10 @@ const overlay = () => {
 };
 
 /** Opens the recorded browser page with a mocked Studio session. `preview` delays are read when Generate preview is clicked. */
-export async function startDemo({ base, workDir, previewMs = { stage: 3500, done: 7500 } }) {
+export async function startDemo({ base, workDir, previewMs = { stage: 3500, done: 7500 }, scale = 1, record = true, size = SIZE }) {
   fs.mkdirSync(workDir, { recursive: true });
   const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: SIZE, recordVideo: { dir: workDir, size: SIZE }, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport: size, ...(record ? { recordVideo: { dir: workDir, size } } : {}), deviceScaleFactor: scale });
   await context.addInitScript(overlay);
   const page = await context.newPage();
   const started = Date.now();
@@ -158,7 +158,7 @@ export async function startDemo({ base, workDir, previewMs = { stage: 3500, done
     const video = page.video();
     await context.close();
     await browser.close();
-    return video.path();
+    return video ? video.path() : null;
   };
   return { page, detail, clips, card, move, click, safely, finish, started, delays };
 }

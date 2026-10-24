@@ -224,8 +224,10 @@ always the fixed line "Full lecture in description."; with a URL the model sugge
 specific call to action, which may point to the linked full lecture, and generic lines
 such as "Try it now" are still rejected.
 A Source URL is also shown on the ending card: a short form of the link (no scheme, `www`
-or query; long paths keep their last segment) appears under the call to action after the
+or query; long paths keep their last segment) is the last line, under the call to action after the
 voice, and the corner label "Source lecture" becomes "Source: <site>" unless you edited it.
+With no Source URL the same line shows the placeholder `example.edu/lecture` (a reserved example
+domain), so replace it with a real link before publishing.
 The Export tab shows two checks per export: the **technical check** (media and caption
 metrics) and the **structure check** (section order, clip order, bridge labels, narration
 wording, evidence and duration, plus a comparison with the exported blueprint when the

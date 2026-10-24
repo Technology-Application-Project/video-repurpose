@@ -89,7 +89,10 @@ class CardLayoutTests(unittest.TestCase):
         storyboard["ending"]["credit"] = "Prof. Lee, Week 3"
         self.assertEqual(cards.card_beats("ending", storyboard, KICKERS)[1], ["Prof. Lee, Week 3"])
         plain, corner = cards.card_beats("ending", draft(), KICKERS)
-        self.assertFalse(any(role == "link" for beat in plain for _, role, _ in beat))
+        self.assertFalse(any(role == "link" for _, role, _ in plain[0]))
+        self.assertEqual(plain[1][-1], (cards.EXAMPLE_LINK, "link", False))
+        self.assertEqual(cards.EXAMPLE_LINK, "example.edu/lecture")
+        self.assertEqual(corner, ["Source lecture"])
         self.assertEqual(corner, ["Source lecture"])
         opening, _ = cards.card_beats("opening", {**storyboard, "source_url": "https://example.org/a"}, KICKERS)
         self.assertFalse(any(role == "link" for _, role, _ in opening[0]))
