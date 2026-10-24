@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brevio Studio | 4-minute pitch</title>
+<style>
+ :root{--green:#145f4c;--gold:#d7ac40;--ink:#202d28;--muted:#556760;--line:#d5dfda;--red:#a34e48;--paper:#f7f9f8;--mint:#eef5f1;--slate:#2d4a5a;--serif:Palatino,"Palatino Linotype",Georgia,serif;--sans:"Avenir Next","Segoe UI",sans-serif}
+ *{box-sizing:border-box;margin:0;padding:0;letter-spacing:0}
+ html,body{height:100%;background:#0f1a16;color:var(--ink);font:16px/1.4 var(--sans);overflow:hidden}
+ button{font:inherit;cursor:pointer}
+ #app{display:flex;flex-direction:column;height:100%}
+ #viewport{flex:1;min-height:0;position:relative;overflow:hidden}
+ #stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:0 0;background:var(--paper);overflow:hidden;font-size:34px;
+  background-image:repeating-linear-gradient(90deg,transparent 0,transparent 119px,#145f4c08 119px,#145f4c08 120px)}
+
+ /* stage chrome */
+ #sprog{position:absolute;left:0;top:0;height:8px;background:var(--green);width:0;z-index:5}
+ #chip{position:absolute;left:90px;top:36px;display:flex;align-items:center;gap:16px;font-size:24px;font-weight:700;text-transform:uppercase;color:var(--green);z-index:4}
+ #chip b{background:var(--green);color:#fff;border-radius:6px;padding:4px 14px;font-weight:700}
+ #brand{position:absolute;right:90px;top:36px;font-size:24px;font-weight:700;text-transform:uppercase;color:var(--muted);z-index:4}
+ #sclock{position:absolute;right:90px;top:72px;font:600 22px Menlo,monospace;color:var(--muted);z-index:4;display:none}
+ body.showclock #sclock{display:block}
+ #cap{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);max-width:1560px;width:max-content;background:rgba(32,45,40,.92);color:#fff;font-size:32px;line-height:1.35;text-align:center;padding:12px 30px;border-radius:12px;z-index:6;opacity:0;transition:opacity .25s;pointer-events:none}
+ #cap.on{opacity:1}
+ body.nocap #cap{display:none}
+
+ .scene{position:absolute;inset:0;visibility:hidden;opacity:0;transition:opacity .5s}
+ .scene.active{visibility:visible;opacity:1}
+ .body{position:absolute;left:90px;right:90px;top:120px;height:770px}
+ .src{position:absolute;left:90px;right:90px;bottom:26px;font-size:20px;line-height:1.35;color:var(--muted)}
+
+ /* reveal primitives */
+ .r{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s ease}
+ .r.in{opacity:1;transform:none}
+ .r.pop{transform:scale(.86)}.r.pop.in{transform:none}
+ .r.fromleft{transform:translateX(-60px)}.r.fromleft.in{transform:none}
+ .jump,.jump *{transition:none!important}
+
+ h1,h2,.serif{font-family:var(--serif)}
+ h2{font-size:64px;line-height:1.12;margin-bottom:22px}
+ .kicker{font-size:26px;font-weight:700;text-transform:uppercase;color:var(--green);margin-bottom:10px}
+ .card{background:#fff;border:2px solid var(--line);border-radius:14px;padding:26px 30px}
+ .card cite{display:block;margin-top:12px;font-size:22px;font-style:normal;color:var(--muted)}
+ .pill{display:inline-block;border-radius:999px;padding:6px 22px;font-size:28px;font-weight:600;border:2px solid var(--line);background:#fff}
+ .pill.g{background:var(--mint);border-color:#b8cec3;color:var(--green)}
+ .pill.y{background:#fcf5df;border-color:#d8bd69}
+ .pill.r2{background:#f6e6e4;border-color:#d9a8a3;color:var(--red)}
+
+ /* 1 hook */
+ .hook .lecture{position:absolute;left:0;right:0;top:30px}
+ .rowlabel{font-size:30px;color:var(--muted);margin-bottom:14px}.rowlabel b{color:var(--ink);font-size:40px}
+ .ticks{display:flex;align-items:center;gap:6px;height:150px}
+ .tick{flex:1;height:var(--h);border-radius:4px;background:#b9cbc3;transition:opacity .8s,background .8s}
+ .flag.in~.ticks .tick:not(.sel){opacity:.14}.flag.in~.ticks .tick.sel{background:var(--gold)}
+ .hook .short{position:absolute;left:0;right:0;top:270px}
+ .chips{display:flex;gap:10px;height:84px}
+ .chips span{display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:26px;font-weight:600;border:2px solid #b8cec3;background:var(--mint);color:var(--green)}
+ .chips span.clip{background:#dfe9ee;border-color:#a8bcc7;color:var(--slate)}
+ .hook .title{position:absolute;left:0;right:0;top:470px;text-align:center}
+ .hook h1{font-size:170px;line-height:1.05;color:var(--green)}
+ .hook .title p{font-size:46px;color:var(--muted);margin-top:12px}
+ .badge{position:absolute;right:0;top:-14px}
+
+ /* 2 problem */
+ .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:36px}
+ .stat .num{font:700 112px/1 var(--serif);color:var(--green)}
+ .stat.warn .num{color:var(--red)}
+ .stat p{font-size:28px;margin-top:8px}
+ .stat b{display:block;font-size:28px;margin-top:10px}
+ .squeeze{display:flex;align-items:center;gap:28px;margin-top:34px;flex-wrap:wrap}
+ .squeeze .box{border-radius:12px;padding:20px 30px;font-size:34px;font-weight:600}
+ .box.slow{background:#fcf5df;border:2px solid #d8bd69}
+ .box.auto{background:#f6e6e4;border:2px solid #d9a8a3}
+ .stuck{width:100%;margin-top:20px;font:700 56px/1.15 var(--serif);color:var(--ink)}
+ .stuck em{font-style:normal;color:var(--red)}
+
+ /* 3 solution */
+ .demo{display:flex;gap:56px;align-items:flex-start}
+ .frame{position:relative;width:1180px;height:704px;flex:none;border-radius:14px;background:#101510;border:2px solid #b8cec3;overflow:hidden;box-shadow:0 18px 50px #145f4c30}
+ .frame .tb{position:absolute;left:0;right:0;top:0;height:40px;background:#e8efeb;border-bottom:2px solid #b8cec3;display:flex;align-items:center;gap:8px;padding:0 16px;font-size:20px;color:var(--muted)}
+ .frame .tb i{width:13px;height:13px;border-radius:50%;background:#c5d3cb}
+ .frame .tb span{margin-left:12px}
+ .screen{position:absolute;left:0;right:0;top:40px;bottom:0;overflow:hidden;background:#101510}
+ .shot{position:absolute;inset:0;opacity:0;transform:scale(1);transform-origin:50% 35%;transition:opacity .7s,transform 16s linear}
+ .shot.in{opacity:1;transform:scale(1.035)}
+ .shot img{display:block;width:100%;height:100%}
+ .co{position:absolute;border:5px solid var(--gold);border-radius:10px;box-shadow:0 0 0 4px #d7ac4040,0 0 28px #d7ac40aa;opacity:0;transition:opacity .4s}
+ .co.in{opacity:1;animation:pulse 1.6s ease-in-out infinite}
+ .co b{position:absolute;left:-5px;top:-44px;background:var(--gold);color:#1d2a24;font-size:22px;padding:3px 14px;border-radius:8px 8px 8px 0;white-space:nowrap}
+ .co.low b{top:auto;bottom:-44px;border-radius:0 8px 8px 8px}
+ .co.lft b{left:auto;right:calc(100% + 4px);top:50%;transform:translateY(-50%);border-radius:8px}
+ @keyframes pulse{50%{box-shadow:0 0 0 10px #d7ac4030,0 0 36px #d7ac40}}
+ .figcap{font-size:23px;color:var(--muted);margin-top:12px;max-width:1180px}
+ .side{flex:1;min-width:0}
+ .vstep{position:relative;padding:16px 24px 16px 84px;margin-bottom:12px}
+ .vstep .n{position:absolute;left:22px;top:14px;width:46px;height:46px;border-radius:50%;background:var(--mint);border:2px solid #b8cec3;color:var(--green);font:700 28px/42px var(--serif);text-align:center}
+ .vstep h3{font:700 38px/1.1 var(--serif);color:var(--green)}
+ .vstep p{font-size:23px;color:var(--muted);margin-top:3px}
+ .vstep .hl{position:absolute;inset:-3px;border:5px solid var(--green);border-radius:16px;opacity:0;transition:opacity .4s;pointer-events:none}
+ .vstep .hl.in{opacity:1}
+ .vstep .pill{position:absolute;right:16px;top:16px;font-size:22px;padding:2px 14px}
+ .loop{display:flex;align-items:center;gap:6px;margin-top:22px}
+ .loop .pill{font-size:22px;padding:3px 13px}.loop i{font-style:normal;color:var(--muted);font-size:20px;display:inline-block}
+ .stamp{margin-top:22px;display:inline-block;white-space:nowrap;border:4px solid var(--gold);color:#8a6a10;border-radius:12px;padding:6px 22px;font:700 32px var(--serif);transform:rotate(-2deg)}
+ .stamp.r{transform:rotate(-2deg) scale(.8)}.stamp.r.in{transform:rotate(-2deg)}
+
+ /* 4 market */
+ .market-wrap{display:flex;gap:60px;height:100%}
+ .left{width:540px;flex:none}
+ .right{flex:1;position:relative}
+ .persona{margin-top:20px;padding:22px 28px}
+ .persona b{display:block;font-size:36px;line-height:1.15}
+ .persona span{font-size:26px;color:var(--muted)}
+ .layer{position:absolute;inset:0;opacity:0;transition:opacity .6s}
+ .layer.in{opacity:1}
+ .mk-row{display:flex;align-items:center;gap:20px;margin-top:22px}
+ .mk-row .yr{width:90px;font-size:34px;font-weight:700}
+ .track{flex:1;height:96px;background:#e6eeea;border-radius:10px;overflow:hidden}
+ .fill{height:100%;width:0;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:flex-end;padding-right:20px;color:#fff;font:700 40px var(--serif);transition:width 1.4s cubic-bezier(.2,.7,.2,1);white-space:nowrap}
+ .in .fill,.fill.in{width:var(--w)}
+ .mk-grid{display:flex;gap:60px}
+ .mk-left{flex:1}
+ .cagr{display:inline-block;margin-top:30px;font-size:42px;font-weight:700;color:var(--green);background:var(--mint);border:2px solid #b8cec3;border-radius:12px;padding:6px 26px}
+ .donut{width:340px;text-align:center}
+ .donut svg{width:290px;height:290px;transform:rotate(-90deg)}
+ .donut circle{fill:none;stroke-width:20}
+ .donut .bg{stroke:#e6eeea}
+ .donut .ring{stroke:var(--gold);stroke-linecap:round;stroke-dasharray:552.9;stroke-dashoffset:552.9;transition:stroke-dashoffset 1.6s ease}
+ .donut.in .ring{stroke-dashoffset:204.6}
+ .donut .pc{margin-top:-205px;position:relative;font:700 82px/1 var(--serif);height:210px}
+ .donut p{font-size:28px;margin-top:6px}
+ .chart{position:absolute;left:70px;right:10px;top:50px;bottom:60px;border-left:3px solid var(--ink);border-bottom:3px solid var(--ink);background:linear-gradient(#0000 49.7%,#d5dfda 49.7%,#d5dfda 50.3%,#0000 50.3%),linear-gradient(90deg,#0000 49.8%,#d5dfda 49.8%,#d5dfda 50.2%,#0000 50.2%)}
+ .ax{position:absolute;font-size:26px;font-weight:600;color:var(--muted)}
+ .pt{position:absolute;transform:translate(-50%,-50%);white-space:nowrap}
+ .pt.r{transform:translate(-50%,-30%)}.pt.r.in{transform:translate(-50%,-50%)}
+ .pt .pill{font-size:30px}
+ .pt.me .pill{background:var(--green);color:#fff;border-color:var(--green);font-size:40px;padding:10px 34px;box-shadow:0 0 0 10px #d7ac4066}
+ .zone{position:absolute;right:20px;top:14px;font-size:24px;font-weight:700;text-transform:uppercase;color:var(--green)}
+ .caveat{position:absolute;right:0;top:4px;font-size:22px;color:var(--muted)}
+
+ /* 5 value */
+ .pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:20px}
+ .pillar{border-top:8px solid var(--green);min-height:530px;padding-top:24px}
+ .pillar:nth-child(2){border-color:var(--gold)}.pillar:nth-child(3){border-color:var(--red)}
+ .pillar h3{font:700 54px/1.1 var(--serif)}
+ .pillar .big{font:700 150px/1 var(--serif);color:var(--green);margin-top:26px}
+ .pillar:nth-child(2) .big{color:#8a6a10}.pillar:nth-child(3) .big{color:var(--red)}
+ .pillar .det p{font-size:32px;margin-top:10px}
+ .pillar .det small{display:block;font-size:24px;color:var(--muted);margin-top:14px}
+
+ /* 6 feasibility */
+ .stagebar{display:flex;height:100px;border-radius:10px;overflow:hidden;margin-top:12px;gap:4px}
+ .stagebar .seg{flex:0 0 auto;width:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:700;transition:width 1.2s cubic-bezier(.2,.7,.2,1);overflow:hidden;white-space:nowrap}
+ .stagebar.in .seg{width:var(--w)}
+ .legend{display:flex;gap:4px;font-size:24px;color:var(--muted);margin-top:8px}
+ .legend span{text-align:center}
+ .feas{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;margin-top:26px}
+ .feas .card b{display:block;font:700 64px/1.05 var(--serif);color:var(--green)}
+ .feas .card span{font-size:28px;color:var(--muted)}
+ .split{display:grid;grid-template-columns:1.4fr 1fr;gap:30px;margin-top:26px}
+ .split .card{font-size:30px}
+ .split .card b{display:block;font-size:32px;margin-bottom:4px}
+ .split .loc{background:var(--mint);border-color:#b8cec3}
+ .split .cloud{background:#fcf5df;border-color:#d8bd69}
+
+ /* 7 risk */
+ .rk{display:flex;align-items:center;gap:24px;border-bottom:2px solid var(--line);padding:14px 0;min-height:96px}
+ .rk .risk{width:760px;font-size:36px;font-weight:700;line-height:1.15}
+ .rk .arr{color:var(--muted);font-size:40px}
+ .rk .mit{flex:1;font-size:30px;line-height:1.25;color:var(--muted)}
+ .rk .mit b{color:var(--ink)}
+ .rk .st{width:250px;text-align:right}
+ .rk .st .pill{font-size:24px;padding:4px 16px}
+
+ /* 8 cta */
+ .asks{display:grid;grid-template-columns:repeat(3,1fr);gap:36px;margin-top:14px}
+ .ask{min-height:370px;border-top:8px solid var(--green)}
+ .ask:nth-child(2){border-top-color:var(--gold)}.ask:nth-child(3){border-top-color:var(--red)}
+ .ask .who{font-size:26px;font-weight:700;text-transform:uppercase;color:var(--muted)}
+ .ask h3{font:700 48px/1.12 var(--serif);margin:8px 0 12px}
+ .ask p{font-size:30px;line-height:1.3}
+ .ask .tag{margin-top:14px}
+ .impact{display:flex;gap:20px;align-items:center;margin-top:28px;font-size:32px}
+ .impact .pill{font-size:32px}
+ .final{margin-top:26px;font:700 78px/1.1 var(--serif);color:var(--green)}
+
+ /* dock */
+ body.clean #dock{display:none}
+ #dock{background:#16231e;color:#dfe9e4;padding:12px 18px 14px;border-top:1px solid #2b3d35;font-size:15px}
+ .bar{position:relative;height:30px;margin-bottom:22px;background:#22342d;border-radius:4px;cursor:pointer}
+ #segs{position:absolute;inset:0}
+ #segs i{position:absolute;top:0;bottom:0;border-right:2px solid #16231e;font:600 11px/30px var(--sans);color:#0f1a16;padding-left:6px;overflow:hidden;white-space:nowrap}
+ #band{position:absolute;top:-4px;bottom:-4px;background:#d7ac4033;border-left:2px dashed #d7ac40;border-right:2px dashed #d7ac40;pointer-events:none}
+ #tgt{position:absolute;top:-6px;bottom:-6px;width:3px;background:#fff;pointer-events:none}
+ .tl{position:absolute;top:32px;font-size:11px;color:#9fb5aa;transform:translateX(-50%)}
+ #head{position:absolute;top:-8px;bottom:-8px;width:4px;background:#d7f35d;pointer-events:none;border-radius:2px}
+ .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+ .row button{background:#22342d;color:#dfe9e4;border:1px solid #38503f;border-radius:6px;padding:6px 14px}
+ .row button:hover{background:#2d443a}.row button.on{background:#d7f35d;color:#16231e;border-color:#d7f35d;font-weight:700}
+ .row label{display:flex;gap:6px;align-items:center;cursor:pointer}
+ #clock{font:600 17px Menlo,monospace;margin-left:auto}
+ #status{border-radius:999px;padding:4px 14px;background:#22342d;font-weight:600}
+ #status.ok{background:#1f5a3f;color:#c9f5d9}#status.bad{background:#6b2f2a;color:#ffd9d4}
+ #prompter{margin-top:12px;display:none;border-top:1px solid #2b3d35;padding-top:10px}
+ body.pres #prompter{display:block}
+ #pmeta{font-size:13px;color:#9fb5aa;text-transform:uppercase;font-weight:700}
+ #ptext{font-size:24px;line-height:1.45;max-height:150px;overflow:auto;margin-top:4px}
+ #ptext span{opacity:.4}#ptext span.cur{opacity:1;background:#d7f35d;color:#16231e;border-radius:4px;padding:0 4px}
+ #ptext span.past{opacity:.25}
+ #pnext{font-size:14px;color:#9fb5aa;margin-top:6px}
+ #help{position:fixed;right:16px;bottom:16px;max-width:380px;background:#16231ef0;color:#dfe9e4;border:1px solid #38503f;border-radius:8px;padding:14px 18px;font-size:14px;line-height:1.6;display:none;z-index:20}
+ #help.on{display:block}#help kbd{background:#2d443a;border-radius:4px;padding:1px 6px;font-family:Menlo,monospace}
+ #audionote{color:#ffd9d4;font-size:13px}
+ @media (prefers-reduced-motion:reduce){.r,.fill,.seg,.ring,.scene,.tick{transition:none!important}}
+</style>
+</head>
+<body class="">
+<div id="app">
+ <div id="viewport">
+  <div id="stage" aria-label="Brevio Studio pitch stage">
+   <div id="sprog"></div>
+   <div id="chip"><b id="chipn">01</b><span id="chipl">Hook</span></div>
+   <div id="brand">Brevio Studio</div>
+   <div id="sclock">0:00</div>
+
+   <!-- 1 HOOK -->
+   <section class="scene" id="sc-hook"><div class="body hook">
+    <div class="lecture r" data-at="0.2">
+     <div class="rowlabel"><b>30:00</b> &nbsp;one lecture, 1,800 seconds</div>
+     <i class="flag" data-s="1"></i>
+     <div class="ticks" id="ticks"></div>
+    </div>
+    <div class="short">
+     <div class="rowlabel r" data-s="1" data-d="0.5"><b>about 0:40</b> &nbsp;one short video for the audience you choose</div>
+     <div class="chips">
+      <span class="r pop" data-s="1" data-d="1.0" style="flex:1">Opening</span>
+      <span class="r pop clip" data-s="1" data-d="1.4" style="flex:2.4">Clip</span>
+      <span class="r pop" data-s="1" data-d="1.8" style="flex:.9">Bridge</span>
+      <span class="r pop clip" data-s="1" data-d="2.2" style="flex:2.4">Clip</span>
+      <span class="r pop" data-s="1" data-d="2.6" style="flex:.9">Bridge</span>
+      <span class="r pop clip" data-s="1" data-d="3.0" style="flex:2.4">Clip</span>
+      <span class="r pop" data-s="1" data-d="3.4" style="flex:1">Ending</span>
+     </div>
+     <div style="position:relative;height:0"><span class="pill y badge r pop" data-s="1" data-d="5.0" style="top:20px">Approved by a person</span></div>
+    </div>
+    <div class="title r" data-s="2"><h1>Brevio Studio</h1><p>One long lecture. One short, reviewed video.</p></div>
+   </div></section>
+
+   <!-- 2 PROBLEM -->
+   <section class="scene" id="sc-problem"><div class="body">
+    <h2 class="r" data-s="0" data-d="0.8" style="font-size:56px">Great lectures. Too long to watch. Too risky to automate.</h2>
+    <div class="grid3">
+     <div class="card stat r pop" data-s="1">
+      <div class="num"><span data-s="1" data-count data-to="6.9" data-dec="1" data-suf="M">0</span></div>
+      <p>video-watching sessions in an edX study</p><b>Shorter videos are much more engaging</b><cite>Guo, Kim &amp; Rubin, 2014</cite>
+     </div>
+     <div class="card stat r pop" data-s="2">
+      <div class="num"><span data-s="2" data-count data-to="71" data-suf="%">0</span></div>
+      <p>of video marketers say 30 seconds to 2 minutes works best</p><cite>Wyzowl, 2026 (n=266)</cite>
+     </div>
+     <div class="card stat warn r pop" data-s="4">
+      <div class="num"><span data-s="4" data-count data-to="90" data-suf="%">0</span></div>
+      <p>of viewers are concerned about AI content, including inaccuracies</p><cite>TechSmith, 2026</cite>
+     </div>
+    </div>
+    <div class="squeeze">
+     <div class="box slow r fromleft" data-s="3">By hand: slow</div>
+     <div class="box auto r fromleft" data-s="3" data-d="1.2">Fully automatic: chases virality, hard to trust</div>
+     <div class="stuck r" data-s="5">Teams are stuck between <em>slow</em> and <em>untrustworthy</em>.</div>
+    </div>
+   </div>
+   <div class="src">Sources: Guo, Kim &amp; Rubin, &ldquo;How video production affects student engagement&rdquo;, L@S 2014 (doi 10.1145/2556325.2566239); Wyzowl, State of Video Marketing 2026 (266 respondents); TechSmith, 2026 Video Statistics.</div></section>
+
+   <!-- 3 SOLUTION -->
+   <section class="scene" id="sc-solution"><div class="body">
+    <div class="demo">
+     <div>
+      <div class="frame r" data-at="0.2">
+       <div class="tb"><i></i><i></i><i></i><span>Brevio Studio &middot; running locally</span></div>
+       <div class="screen">
+        <div class="shot" data-s="1"><img src="stills/ui-source.png" alt="Source screen: choose the lecture and the audience">
+         <div class="co" data-s="1" data-d="2.4" style="left:70.6%;top:31%;width:17.4%;height:22.5%"><b>Pick the audience</b></div></div>
+        <div class="shot" data-s="2"><img src="stills/ui-clips.png" alt="Clips screen: strongest excerpts found in the lecture"></div>
+        <div class="shot" data-s="2" data-d="4.8"><img src="stills/ui-blueprint.png" alt="Blueprint panel: opening, bridges and ending planned before writing">
+         <div class="co low" data-s="2" data-d="5.6" style="left:6.2%;top:27.6%;width:87.5%;height:26%"><b>Plan first: opening, bridges, ending</b></div></div>
+        <div class="shot" data-s="3"><img src="stills/ui-studio.png" alt="Studio screen: narrated preview with story sequence and source evidence"></div>
+        <div class="shot" data-s="4"><img src="stills/ui-approval.png" alt="Studio approval: a named reviewer approves the exact preview">
+         <div class="co" data-s="4" data-d="0.4" style="left:7.4%;top:71%;width:68.5%;height:22%"><b>A named reviewer approves</b></div></div>
+        <div class="shot" data-s="5"><img src="stills/ui-export.png" alt="Export screen with technical and structure checks">
+         <div class="co lft" data-s="6" data-d="0.8" style="left:73.6%;top:27.2%;width:14%;height:5.6%"><b>Technical check</b></div>
+         <div class="co lft" data-s="6" data-d="5.0" style="left:73.6%;top:33.6%;width:14%;height:7.4%"><b>Structure check</b></div></div>
+       </div>
+      </div>
+      <div class="figcap r" data-at="0.8">The real app, running locally. Demo session: plan data mocked, no cloud calls; lecture picture blurred.</div>
+     </div>
+     <div class="side">
+      <div class="card vstep r" data-s="1"><span class="n">1</span><h3>Source</h3><p>Lecture and audience</p><i class="hl" data-s="1" data-out-s="2"></i></div>
+      <div class="card vstep r" data-s="2"><span class="n">2</span><h3>Clips</h3><p>Local transcript, clips, story plan</p><i class="hl" data-s="2" data-out-s="3"></i></div>
+      <div class="card vstep r" data-s="3"><span class="n">3</span><h3>Studio</h3><p>Narrated preview and evidence</p>
+       <span class="pill y r pop" data-s="4">Approval</span><i class="hl" data-s="3" data-out-s="5"></i></div>
+      <div class="card vstep r" data-s="5"><span class="n">4</span><h3>Export</h3><p>Technical and structure checks</p><i class="hl" data-s="5" data-out-s="7"></i></div>
+      <div class="loop">
+       <span class="pill g r pop" data-s="7" data-d="0">Plan</span><i class="r" data-s="7" data-d="0.2">&rarr;</i>
+       <span class="pill g r pop" data-s="7" data-d="0.4">Build</span><i class="r" data-s="7" data-d="0.6">&rarr;</i>
+       <span class="pill g r pop" data-s="7" data-d="0.8">Check</span><i class="r" data-s="7" data-d="1.0">&rarr;</i>
+       <span class="pill y r pop" data-s="7" data-d="1.2">Approve</span>
+      </div>
+      <span class="stamp r pop" data-s="8">Nothing auto-published</span>
+     </div>
+    </div>
+   </div>
+   <div class="src">Screens: Brevio Studio proof of concept, captured at 2x in a scripted demo session (frontend/scripts/capture-pitch-stills.mjs).</div></section>
+
+   <!-- 4 MARKET -->
+   <section class="scene" id="sc-market"><div class="body"><div class="market-wrap">
+    <div class="left">
+     <div class="kicker r" data-s="0" data-d="0.6">Target users</div>
+     <div class="card persona r pop" data-s="1" data-d="1.0"><b>University teaching and communications teams</b><span>Lectures to short explainers</span></div>
+     <div class="card persona r pop" data-s="1" data-d="3.3"><b>Corporate learning and development</b><span>Training and briefings</span></div>
+     <div class="card persona r pop" data-s="1" data-d="5.2"><b>Research communicators</b><span>Findings for the public</span></div>
+    </div>
+    <div class="right">
+     <div class="layer" data-s="2" data-out-s="5">
+      <div class="kicker r" data-s="2">Market: AI video generators</div>
+      <div class="mk-grid">
+       <div class="mk-left">
+        <div class="mk-row r" data-s="3" data-d="2.5"><span class="yr">2025</span><div class="track"><div class="fill r2" style="--w:23%"></div></div></div>
+        <div class="mk-row r" data-s="3" data-d="5.5"><span class="yr">2033</span><div class="track"><div class="fill r2" style="--w:100%"></div></div></div>
+        <div class="cagr r pop" data-s="3" data-d="8.0">20.3% a year</div>
+       </div>
+       <div class="donut r pop" data-s="4">
+        <svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="88"/><circle class="ring" cx="100" cy="100" r="88"/></svg>
+        <div class="pc"><span data-s="4" data-count data-to="63" data-suf="%" style="display:block;padding-top:68px">0</span></div>
+        <p>of video marketers already use AI to make or edit video</p>
+       </div>
+      </div>
+     </div>
+     <div class="layer" data-s="5">
+      <div class="kicker r" data-s="5">Landscape: where each tool sits</div>
+      <div class="chart">
+       <span class="zone r" data-s="6">Source-grounded, human-approved</span>
+       <span class="ax" style="left:10px;top:8px">Source-grounded learning</span>
+       <span class="ax" style="left:10px;bottom:8px">Social virality</span>
+       <span class="ax" style="left:0;bottom:-46px">&larr; Fully automatic</span>
+       <span class="ax" style="right:0;bottom:-46px">Human-approved &rarr;</span>
+       <div class="pt r pop" data-s="5" data-d="2.4" style="left:14%;top:78%"><span class="pill">OpusClip</span></div>
+       <div class="pt r pop" data-s="5" data-d="4.6" style="left:62%;top:66%"><span class="pill">Descript</span></div>
+       <div class="pt r pop" data-s="5" data-d="6.6" style="left:26%;top:40%"><span class="pill">Synthesia</span></div>
+       <div class="pt r pop" data-s="5" data-d="7.6" style="left:56%;top:44%"><span class="pill">Panopto</span></div>
+       <div class="pt me r pop" data-s="6" style="left:80%;top:20%"><span class="pill">Brevio Studio</span></div>
+      </div>
+      <div class="caveat r" data-s="5" data-d="1">Our positioning from vendor descriptions. Not a benchmark.</div>
+     </div>
+    </div>
+   </div></div>
+   <div class="src">Sources: Grand View Research, AI Video Generator Market 2026&ndash;2033 (USD 788.5M in 2025 to 3,441.6M in 2033); Wyzowl 2026 (63%, up from 51%); vendor websites: OpusClip, Descript, Synthesia, Panopto.</div></section>
+
+   <!-- 5 VALUE -->
+   <section class="scene" id="sc-value"><div class="body">
+    <h2 class="r" data-s="0">Faster. Consistent. Human-led.</h2>
+    <div class="pillars">
+     <div class="pillar r" data-s="0" data-d="1.6"><h3>Faster highlights</h3>
+      <div class="det r" data-s="1"><div class="big">&asymp;5 min</div><p>of local processing in our test run on a 15-minute lecture, before human review.</p><small>Time saved versus manual editing is not yet measured.</small></div></div>
+     <div class="pillar r" data-s="0" data-d="3.0"><h3>Consistent quality</h3>
+      <div class="det r" data-s="2"><div class="big">14</div><p>technical measures plus a &ldquo;story follows the plan&rdquo; check on every export.</p></div></div>
+     <div class="pillar r" data-s="0" data-d="4.2"><h3>A human in control</h3>
+      <div class="det r" data-s="3"><div class="big">87%</div><p>of viewers still prefer a human speaker, so the expert&rsquo;s own voice and words stay central.</p><small>A named reviewer approves before export.</small></div></div>
+    </div>
+   </div>
+   <div class="src">Sources: TechSmith, 2026 Video Statistics (87% prefer a human speaker); Brevio baseline run and 15 Oct 2026 validation (docs/four-week-plan.md, docs/project-overview.html).</div></section>
+
+   <!-- 6 FEASIBILITY -->
+   <section class="scene" id="sc-feasibility"><div class="body">
+    <div class="kicker r" data-s="0">Feasibility</div>
+    <h2><span class="r" data-s="0">Is it feasible?</span> <span class="r" data-s="1" style="color:var(--green)">It already runs end to end.</span></h2>
+    <div class="r" data-s="2">
+     <div style="font-size:30px;color:var(--muted)">919.6 s test lecture &rarr; <b style="color:var(--ink)">298.6 s</b> of local processing</div>
+     <div class="stagebar r" data-s="2" data-d="0.4">
+      <div class="seg" style="--w:40.4%;background:#145f4c">Transcribe</div>
+      <div class="seg" style="--w:37.3%;background:#2d4a5a">Nominate</div>
+      <div class="seg" style="--w:4%;background:#d7ac40"></div>
+      <div class="seg" style="--w:18.3%;background:#a34e48">Preview</div>
+     </div>
+     <div class="legend"><span style="width:40.4%">120.5 s</span><span style="width:37.3%">111.5 s</span><span style="width:4%">12 s</span><span style="width:18.3%">54.5 s</span></div>
+    </div>
+    <div class="feas">
+     <div class="card r pop" data-s="3"><b>3 audiences</b><span>Researcher, general public, kids</span></div>
+     <div class="card r pop" data-s="3" data-d="1.2"><b>37.6&ndash;45.6 s</b><span>of finished 1080p video per run</span></div>
+     <div class="card r pop" data-s="3" data-d="2.6"><b>14 checks</b><span>technical measures passed</span></div>
+    </div>
+    <div class="split">
+     <div class="card loc r" data-s="4"><b>On your machine</b>Transcription, voices and rendering</div>
+     <div class="card cloud r" data-s="5"><b>Cloud gateway</b>Short text requests only, at most 5 per run</div>
+    </div>
+   </div>
+   <div class="src">Internal measurements: baseline 919.6 s lecture (docs/four-week-plan.md); validation 15 Oct 2026 (docs/project-overview.html). Stage times exclude cloud storyboard, export and human review.</div></section>
+
+   <!-- 7 RISK -->
+   <section class="scene" id="sc-risk"><div class="body">
+    <div class="kicker r" data-s="0">Risk awareness</div>
+    <h2 class="r" data-s="0" style="margin-bottom:14px">What could go wrong, and what we do</h2>
+    <div class="rk r" data-s="1"><div class="risk">Model summaries can be wrong</div><span class="arr">&rarr;</span><div class="mit"><b>Every claim tied to a quote.</b> Named human approval before export.</div><div class="st"></div></div>
+    <div class="rk r" data-s="2" data-d="0.3"><div class="risk">Caption reading speed failed on lecture excerpts</div><span class="arr">&rarr;</span><div class="mit">Measured, not hidden: reported in every check.</div><div class="st"><span class="pill r2 r" data-s="3">On the fix list</span></div></div>
+    <div class="rk r" data-s="2" data-d="3.8"><div class="risk">Some older renderer tests still fail</div><span class="arr">&rarr;</span><div class="mit">Seven assertions were open at the 15 Oct snapshot.</div><div class="st"><span class="pill r2 r" data-s="3" data-d="0.3">On the fix list</span></div></div>
+    <div class="rk r" data-s="4"><div class="risk">No user trial yet</div><span class="arr">&rarr;</span><div class="mit"><b>No time-saving claim.</b> The pilot measures it.</div><div class="st"></div></div>
+    <div class="rk r" data-s="5" data-d="0.3"><div class="risk">Reuse rights and a synthetic voice</div><span class="arr">&rarr;</span><div class="mit">Rights-cleared lectures only; voice disclosed.</div><div class="st"></div></div>
+    <div class="rk r" data-s="5" data-d="3.5"><div class="risk">Cloud gateway access and pricing unverified</div><span class="arr">&rarr;</span><div class="mit">Capped requests; reviewed pricing before pilot.</div><div class="st"></div></div>
+   </div>
+   <div class="src">Sources: Brevio 15 Oct 2026 validation snapshot (docs/project-overview.html); README cloud setup notes (pricing configuration is operator-accepted and unverified).</div></section>
+
+   <!-- 8 CTA -->
+   <section class="scene" id="sc-cta"><div class="body">
+    <div class="kicker r" data-s="0">The ask</div>
+    <h2 class="r" data-s="0" style="margin-bottom:10px">Help us prove it in a real pilot</h2>
+    <div class="asks">
+     <div class="card ask r" data-s="1"><div class="who">Funding bodies</div><h3>Co-fund a six-month supervised pilot</h3>
+      <p class="r" data-s="1" data-d="3.6">Eligible work may qualify for the R&amp;D Tax Incentive.</p>
+      <div class="tag r pop" data-s="1" data-d="2.4"><span class="pill y">Illustrative: AUD 150,000</span></div></div>
+     <div class="card ask r" data-s="2"><div class="who">Industry partners</div><h3>Bring two or three real lectures</h3>
+      <p>Rights-cleared sources, a named reviewer and honest feedback.</p></div>
+     <div class="card ask r" data-s="3"><div class="who">Investors</div><h3>A small seed to move from proof of concept to pilots</h3>
+      <p>Supervised, measured, no auto-publishing.</p></div>
+    </div>
+    <div class="impact r" data-s="4"><b>We will measure:</b>
+     <span class="pill g r pop" data-s="4" data-d="0.8">Time saved</span><span class="pill g r pop" data-s="4" data-d="2.0">Reviewer approvals</span><span class="pill g r pop" data-s="4" data-d="3.0">Audience understanding</span></div>
+    <div class="final r" data-s="5">Try Brevio on one lecture.</div>
+   </div>
+   <div class="src">The ask is illustrative, for a course assessment. R&amp;D Tax Incentive: business.gov.au (current rules until 1 July 2028). Voice-over is synthetic (local Kokoro).</div></section>
+
+   <div id="cap"></div>
+  </div>
+ </div>
+
+ <div id="dock">
+  <div class="bar" id="bar" title="Click to seek">
+   <div id="band"></div><div id="segs"></div><div id="tgt"></div><div id="head"></div>
+  </div>
+  <div class="row">
+   <button id="bPlay">Play</button><button id="bRestart">Restart</button><button id="bPrev">&#9664; Scene</button><button id="bNext">Scene &#9654;</button>
+   <span style="width:10px"></span>
+   <button id="mAuto">Auto (voice-over)</button><button id="mPres">Presenter (live)</button>
+   <label><input type="checkbox" id="cCap" checked> Captions</label>
+   <label><input type="checkbox" id="cClock"> Stage clock</label>
+   <button id="bFull">Fullscreen</button><button id="bClean">Clean view (H)</button><button id="bHelp">Keys (?)</button>
+   <span id="audionote"></span>
+   <span id="status">Ready</span><span id="clock">0:00 / 0:00</span>
+  </div>
+  <div id="prompter"><div id="pmeta"></div><p id="ptext"></p><div id="pnext"></div></div>
+ </div>
+</div>
+<div id="help"><b>Keys</b><br><kbd>Space</kbd> play / pause &nbsp; <kbd>R</kbd> restart<br><kbd>&larr;</kbd><kbd>&rarr;</kbd> previous / next scene &nbsp; <kbd>1</kbd>&ndash;<kbd>8</kbd> jump<br><kbd>M</kbd> auto / presenter &nbsp; <kbd>C</kbd> captions &nbsp; <kbd>T</kbd> stage clock<br><kbd>H</kbd> clean view (hides the dock for recording) &nbsp; <kbd>F</kbd> fullscreen<br>URL: <code>?mode=presenter&amp;clean=1&amp;t=90</code></div>
+<audio id="vo" src="voice-over.wav" preload="auto"></audio>
+<script src="timings.js"></script>
+<script>
+(function(){
+'use strict';
+const T = window.PITCH_TIMINGS;
+if(!T){document.body.textContent='timings.js is missing. Run tools/make_voiceover.py then tools/make_pitch_assets.py.';return;}
+const scenes = T.scenes, TOTAL = T.total, TARGET = 240, LO = 210, HI = 270;
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), vo = $('#vo'), params = new URLSearchParams(location.search);
+const clamp = (v,a,b) => Math.min(b,Math.max(a,v));
+const fmt = s => { s = Math.max(0,s); return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'); };
+const S = {t:0, playing:false, mode:params.get('mode')==='presenter'?'presenter':'auto', wall:0, last:performance.now(), audioOK:false, cur:-1, done:false, sent:-2};
+
+/* lecture tick bars for the hook scene */
+(function(){
+  const box = $('#ticks'), sel = new Set([9,10,11,12,30,31,32,33,34,35,52,53,54]);
+  for(let k=0;k<64;k++){const d=document.createElement('i');d.className='tick'+(sel.has(k)?' sel':'');d.style.setProperty('--h',(28+((k*37+(k%5)*19)%70))+'%');box.appendChild(d);}
+})();
+
+/* per-scene reveal schedule from the measured narration */
+const cache = scenes.map(sc => {
+  const el = document.getElementById('sc-'+sc.id);
+  const sentT = i => sc.sentences[i].start - sc.start;
+  const items = [...el.querySelectorAll('[data-s],[data-at]')].map(n => {
+    const d = n.dataset;
+    const inT = d.s !== undefined ? sentT(+d.s) + (+d.d||0) : +d.at;
+    const out = d.outS !== undefined ? sentT(+d.outS) + (+d.outD||0) : d.outAt !== undefined ? +d.outAt : Infinity;
+    const c = n.hasAttribute('data-count') ? {to:+d.to, dec:+(d.dec||0), pre:d.pre||'', suf:d.suf||'', dur:+(d.dur||1.6)} : null;
+    return {n, inT, out, c, on:null, txt:null};
+  });
+  return {el, items};
+});
+
+/* timeline bar */
+(function(){
+  const colors = ['#9ec5b5','#b8cec3','#d7ac40','#9bb4c2','#c8d8a0','#e0a8a0','#d9a8a3','#d7f35d'];
+  const segs = $('#segs');
+  scenes.forEach((sc,i) => {
+    const e = document.createElement('i');
+    e.style.left = (sc.start/HI*100)+'%'; e.style.width = ((sc.end-sc.start)/HI*100)+'%'; e.style.background = colors[i%colors.length];
+    e.textContent = sc.label; segs.appendChild(e);
+  });
+  $('#band').style.left = (LO/HI*100)+'%'; $('#band').style.width = ((HI-LO)/HI*100)+'%';
+  $('#tgt').style.left = (TARGET/HI*100)+'%';
+  [[LO,'3:30'],[TARGET,'4:00'],[HI,'4:30']].forEach(([v,l]) => {const e=document.createElement('span');e.className='tl';e.style.left=(v/HI*100)+'%';e.textContent=l;$('#bar').appendChild(e);});
+})();
+
+function sceneAt(t){for(let i=scenes.length-1;i>=0;i--) if(t>=scenes[i].start) return i; return 0;}
+function setStageScale(){
+  const v = $('#viewport'), s = Math.min(v.clientWidth/1920, v.clientHeight/1080);
+  stage.style.transform = `translate(${-960*s}px,${-540*s}px) scale(${s})`;
+}
+function sentenceAt(sc,t){for(let i=0;i<sc.sentences.length;i++){const s=sc.sentences[i];if(t>=s.start-0.05&&t<s.end+0.25) return i;}return -1;}
+
+function buildPrompter(i){
+  const sc = scenes[i], p = $('#ptext'); p.textContent='';
+  sc.sentences.forEach((s,k)=>{const e=document.createElement('span');e.textContent=s.text+' ';p.appendChild(e);});
+  $('#pmeta').textContent = `Scene ${i+1} of ${scenes.length} \u00b7 ${sc.label} \u00b7 planned ${fmt(sc.start)}\u2013${fmt(sc.end)}`;
+  $('#pnext').textContent = i<scenes.length-1 ? `Next: ${scenes[i+1].label}` : 'Last scene: end on the call to action';
+}
+
+function render(){
+  const i = sceneAt(Math.min(S.t, TOTAL-0.001));
+  if(i!==S.cur){
+    if(S.cur>=0) cache[S.cur].el.classList.remove('active');
+    cache[i].el.classList.add('active'); S.cur=i; S.sent=-2;
+    $('#chipn').textContent = String(i+1).padStart(2,'0'); $('#chipl').textContent = scenes[i].label;
+    buildPrompter(i);
+  }
+  const sc = scenes[i], lt = S.t - sc.start;
+  for(const it of cache[i].items){
+    const on = lt>=it.inT && lt<it.out;
+    if(on!==it.on){it.n.classList.toggle('in',on);it.on=on;}
+    if(it.c){
+      const p = clamp((lt-it.inT)/it.c.dur,0,1), v = it.c.to*(1-Math.pow(1-p,3));
+      const txt = it.c.pre + v.toLocaleString('en-US',{minimumFractionDigits:it.c.dec,maximumFractionDigits:it.c.dec}) + it.c.suf;
+      if(txt!==it.txt){it.n.textContent=txt;it.txt=txt;}
+    }
+  }
+  const k = sentenceAt(sc,S.t), cap = $('#cap');
+  if(k!==S.sent){
+    S.sent=k;
+    if(k>=0){cap.textContent=sc.sentences[k].text;cap.classList.add('on');}else cap.classList.remove('on');
+    [...$('#ptext').children].forEach((e,n)=>{e.className = n===k?'cur':(k>=0&&n<k?'past':'');});
+  }
+  hud(sc);
+}
+
+function hud(sc){
+  const proj = S.wall + (TOTAL - S.t), drift = S.wall - S.t;
+  $('#clock').textContent = `${fmt(S.t)} / ${fmt(TOTAL)}`;
+  $('#head').style.left = (S.t/HI*100)+'%';
+  $('#sprog').style.width = (S.t/TOTAL*100)+'%';
+  $('#sclock').textContent = fmt(S.t);
+  const st = $('#status'), len = S.done ? S.wall : proj, ok = len>=LO && len<=HI;
+  st.className = ok ? 'ok' : 'bad';
+  st.textContent = S.done ? `Finished in ${fmt(S.wall)}: ${ok?'within':'outside'} 4:00 \u00b1 0:30`
+    : `Projected ${fmt(proj)} \u00b7 ${S.mode==='presenter' ? (drift>=0?'+':'')+drift.toFixed(1)+' s vs plan' : 'on plan'}`;
+  if(S.mode==='presenter') $('#pmeta').textContent = `Scene ${S.cur+1} of ${scenes.length} \u00b7 ${sc.label} \u00b7 ${fmt(sc.end-S.t)} left in scene \u00b7 planned ${fmt(sc.start)}\u2013${fmt(sc.end)}`;
+}
+
+function tick(now){
+  const dt = Math.min((now-S.last)/1000, 0.25); S.last = now;
+  if(S.playing){
+    S.wall += dt;
+    if(S.mode==='auto' && S.audioOK && !vo.paused){ const a=vo.currentTime; S.t = (a>=S.t-0.25 && a<=S.t+0.5) ? Math.max(S.t,a) : a; } // never step backwards on audio-clock jitter
+    else S.t += dt;
+    if(S.t >= TOTAL-0.02){S.t=TOTAL-0.02; finish();}
+  }
+  render();
+  requestAnimationFrame(tick);
+}
+
+function jump(){stage.classList.add('jump');render();requestAnimationFrame(()=>requestAnimationFrame(()=>stage.classList.remove('jump')));}
+function seek(t){S.t = clamp(t,0,TOTAL-0.02); S.done=false; try{vo.currentTime=S.t;}catch(e){} jump();}
+function play(){
+  if(S.t>=TOTAL-0.05) restart(false);
+  if(S.mode==='auto' && !S.audioOK && !S.audioFailed){S.waiting=true;$('#audionote').textContent='Loading voice-over...';return;}
+  S.waiting=false; S.done=false; S.playing=true; S.last=performance.now();
+  if(S.mode==='auto' && S.audioOK){vo.currentTime=S.t; vo.play().catch(()=>{S.audioOK=false;$('#audionote').textContent='Audio blocked: running silent timer';});}
+  $('#bPlay').textContent='Pause'; $('#bPlay').classList.add('on');
+}
+function pause(){S.playing=false;S.waiting=false; vo.pause(); $('#bPlay').textContent='Play'; $('#bPlay').classList.remove('on');}
+function finish(){pause(); S.done=true; $('#bPlay').textContent='Replay';}
+function restart(start){S.wall=0; S.done=false; seek(0); if(start) play();}
+function toggle(){S.playing?pause():play();}
+function gotoScene(i){seek(scenes[clamp(i,0,scenes.length-1)].start+0.01);}
+function setMode(m){
+  pause(); S.mode=m; document.body.classList.toggle('pres',m==='presenter');
+  $('#mAuto').classList.toggle('on',m==='auto'); $('#mPres').classList.toggle('on',m==='presenter');
+  S.wall=S.t; S.done=false;
+}
+
+vo.addEventListener('canplaythrough',()=>{S.audioOK=true;$('#audionote').textContent='';if(S.waiting) play();});
+vo.addEventListener('error',()=>{S.audioOK=false;S.audioFailed=true;$('#audionote').textContent='voice-over.wav not found: silent timer';if(S.waiting) play();});
+vo.addEventListener('ended',()=>{if(S.mode==='auto'&&S.playing) finish();});
+if(vo.readyState>=4) S.audioOK=true;
+if(vo.error){S.audioFailed=true;$('#audionote').textContent='voice-over.wav not found: silent timer';}
+
+$('#bPlay').onclick = e=>{toggle();e.target.blur();};
+$('#bRestart').onclick = e=>{restart(false);e.target.blur();};
+$('#bPrev').onclick = e=>{gotoScene(S.cur-(S.t-scenes[S.cur].start>2?0:1));e.target.blur();};
+$('#bNext').onclick = e=>{gotoScene(S.cur+1);e.target.blur();};
+$('#mAuto').onclick = e=>{setMode('auto');e.target.blur();};
+$('#mPres').onclick = e=>{setMode('presenter');e.target.blur();};
+$('#cCap').onchange = e=>document.body.classList.toggle('nocap',!e.target.checked);
+$('#cClock').onchange = e=>document.body.classList.toggle('showclock',e.target.checked);
+$('#bFull').onclick = e=>{(document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()).catch(()=>{});e.target.blur();};
+$('#bClean').onclick = ()=>document.body.classList.add('clean');
+$('#bHelp').onclick = ()=>$('#help').classList.toggle('on');
+$('#bar').addEventListener('click',e=>{const r=$('#bar').getBoundingClientRect();seek((e.clientX-r.left)/r.width*HI);});
+window.addEventListener('resize',setStageScale);
+window.addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const k=e.key;
+  if(k===' '){e.preventDefault();toggle();}
+  else if(k==='ArrowRight') gotoScene(S.cur+1);
+  else if(k==='ArrowLeft') gotoScene(S.cur-(S.t-scenes[S.cur].start>2?0:1));
+  else if(k==='r'||k==='R') restart(false);
+  else if(k==='m'||k==='M') setMode(S.mode==='auto'?'presenter':'auto');
+  else if(k==='c'||k==='C'){const b=$('#cCap');b.checked=!b.checked;b.onchange({target:b});}
+  else if(k==='t'||k==='T'){const b=$('#cClock');b.checked=!b.checked;b.onchange({target:b});}
+  else if(k==='h'||k==='H') document.body.classList.toggle('clean');
+  else if(k==='f'||k==='F') $('#bFull').click();
+  else if(k==='?') $('#help').classList.toggle('on');
+  else if(/^[1-8]$/.test(k)) gotoScene(+k-1);
+});
+
+setMode(S.mode);
+if(params.get('clean')==='1') document.body.classList.add('clean');
+if(params.get('captions')==='0'){$('#cCap').checked=false;document.body.classList.add('nocap');}
+if(params.get('t')){seek(parseFloat(params.get('t'))||0);S.wall=S.t;}
+setStageScale(); render();
+requestAnimationFrame(tick);
+if(params.get('autoplay')==='1') play();
+window.__pitch = {S, seek, play, pause, scenes, TOTAL};
+})();
+</script>
+</body>
+</html>

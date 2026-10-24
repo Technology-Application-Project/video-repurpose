@@ -1,0 +1,31 @@
+{
+  "title": "Brevio Studio: 4-minute pitch (v4, with technical, privacy and funding detail)",
+  "voice": "af_heart",
+  "speed": 1.05,
+  "scenes": [
+    {"id": "hook", "label": "Hook",
+     "text": "A thirty-minute lecture goes in. A forty-second video comes out, written for your audience and approved by a person. This is Brevio Studio."},
+    {"id": "problem", "label": "Problem",
+     "text": "Universities record lectures that few people finish. A study of six point nine million viewing sessions found shorter videos are much more engaging. Cutting highlights by hand is slow, and fully automatic tools chase clicks. Ninety percent of viewers worry that AI content may be wrong. Teams are stuck between slow and untrustworthy."},
+    {"id": "solution", "label": "Solution",
+     "text": "Think of Brevio as a careful film editor with a checklist. First, you choose a lecture and an audience. Second, it listens on your own computer, finds the best moments, and plans the story before writing a word. Third, it builds a narrated preview, and a named reviewer must approve it. Fourth, it exports the video and checks it against the plan. Nothing is published automatically."},
+    {"id": "audiences", "label": "Audiences and rubric",
+     "text": "We ship three audience profiles, and more can be added on demand. Researchers get a precise question and the limits kept. The general public gets a relatable question and a clear action. Kids get a playful question and one tiny safe challenge. A five-part rubric then judges accuracy, fit, flow, captions and sound."},
+    {"id": "tech", "label": "Under the hood",
+     "text": "Under the hood, five parts do the work. Speech-to-text and a small language model run on your own computer. A cloud service writes only short text: the hook, bridges and ending. A synthetic local voice narrates, and a video tool assembles the result. More than two hundred automated tests and fourteen export checks guard every step."},
+    {"id": "privacy", "label": "Privacy",
+     "text": "Privacy comes first. The original video, its audio, every face and the speaker's voice never leave your computer. Only short pieces of transcript text go to the cloud service. No video, audio or images are uploaded, and the voice is synthetic."},
+    {"id": "market", "label": "Market and users",
+     "text": "Who needs this? University teaching teams, corporate trainers and research communicators. The AI video market is forecast to grow from under one billion to about three and a half billion US dollars by 2033. Existing tools chase viral clips, edit by text, or generate presenters. None is built around accurate, human-approved learning video."},
+    {"id": "value", "label": "Value proposition",
+     "text": "The value is faster highlights, consistent quality, and a human in control. Investors get a growing market. Industry partners get consistent short videos. Funding bodies get a measurable pilot."},
+    {"id": "feasibility", "label": "Feasibility",
+     "text": "Is it feasible? Yes, it already runs end to end. In our test, a fifteen-minute lecture took under five minutes on a laptop. Videos for all three audiences passed fourteen technical checks. A person approves every video, and cloud use is capped at five short requests."},
+    {"id": "funding", "label": "Use of funds",
+     "text": "We are asking for one hundred and fifty thousand Australian dollars over six months. Fifty-five percent pays for people, a developer and an evaluator. Fifteen percent buys a faster workstation, so long lectures process in less time. Twelve percent funds pilots with partners, and eight percent covers privacy and legal review. Cloud and tools take four percent, and six percent is contingency."},
+    {"id": "risk", "label": "Risk awareness",
+     "text": "We are candid about the risks. Summaries can be wrong, so every claim is tied to a quote and a person approves. Caption reading speed failed our last validation, and it is on the fix list. We have run no user trial yet, so we claim no time savings."},
+    {"id": "cta", "label": "Call to action",
+     "text": "Here is the ask. Funding bodies: co-fund a six-month supervised pilot. Industry partners: bring two or three real lectures. Investors: a small seed to move from proof of concept to pilots. We will measure time saved and approvals. Try Brevio on one lecture."}
+  ]
+}

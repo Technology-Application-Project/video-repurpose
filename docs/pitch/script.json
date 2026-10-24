@@ -1,0 +1,23 @@
+{
+  "title": "Brevio Studio: 4-minute pitch",
+  "voice": "af_heart",
+  "speed": 1.05,
+  "scenes": [
+    {"id": "hook", "label": "Hook",
+     "text": "A thirty-minute lecture goes in. A forty-second video comes out, written for the audience you choose and approved by a person before anyone sees it. This is Brevio Studio."},
+    {"id": "problem", "label": "Problem",
+     "text": "Universities and training teams record hours of expert knowledge, then struggle to get anyone to watch it. A study of six point nine million video sessions found that shorter videos are much more engaging. Marketers say the sweet spot is thirty seconds to two minutes. But cutting highlights by hand is slow, and fully automatic clippers chase virality, not accuracy. Ninety percent of viewers worry that AI content may be wrong. Teams are stuck between slow and untrustworthy."},
+    {"id": "solution", "label": "Solution and process",
+     "text": "Brevio works in four steps. First, choose the lecture and the audience: researchers, the general public, or kids. Second, it transcribes on your own computer, finds the strongest clips, and plans the story before writing a word: the opening, the bridges, and the ending. Third, it builds a narrated preview with captions, music and illustrations, and every section sits beside its source evidence. A named reviewer must approve it. Fourth, export. Every export gets a technical check on media, captions and loudness, and a structure check that asks one question: does the finished story follow the plan? Plan, build, check, approve. Nothing is published automatically."},
+    {"id": "market", "label": "Market and users",
+     "text": "Who needs this? University teaching and communications teams, corporate learning and development, and research communicators. They sit in a fast-growing market. AI video generation is estimated at seven hundred and eighty-nine million dollars in twenty twenty-five, heading for three point four billion by twenty thirty-three. And sixty-three percent of video marketers already use AI to make or edit video. Existing tools cover pieces of the job: OpusClip chases viral clips, Descript edits by text, Synthesia generates presenters. In our review, none is built around source-grounded, human-approved learning video."},
+    {"id": "value", "label": "Value proposition",
+     "text": "Our value proposition is simple: faster highlights, consistent quality, and a human in control. In our test run, a fifteen-minute lecture took about five minutes of local processing, before human review. Every export is checked against its plan and fourteen technical measures. And since most viewers still prefer a human speaker, Brevio keeps the expert's own voice and words at the centre."},
+    {"id": "feasibility", "label": "Feasibility",
+     "text": "Is it feasible? It already runs end to end. On a fifteen-minute test lecture, transcription, clip selection, ranking and preview took under five minutes on a laptop. Runs for all three audiences produced high-definition videos between thirty-eight and forty-six seconds that passed fourteen technical checks. Transcription, voices and rendering stay on the machine. Only short text requests go to a cloud gateway, capped at five per run."},
+    {"id": "risk", "label": "Risk awareness",
+     "text": "We are candid about the risks. Model summaries can be wrong, so every claim is tied to a quote and a person must approve. Caption reading speed on original lecture excerpts failed our check, and some older renderer tests still fail. Both are on the fix list. We have not run a user trial, so we claim no time savings yet. And we use only lectures with clear reuse rights, and we disclose the synthetic voice."},
+    {"id": "cta", "label": "Call to action",
+     "text": "Here is the ask. Funding bodies: co-fund a six-month supervised pilot; eligible work may qualify for the R and D Tax Incentive. Industry partners: bring two or three real lectures. Investors: a small seed to move from proof of concept to pilots. Together we will measure time saved, reviewer approvals, and audience understanding. Try Brevio on one lecture."}
+  ]
+}
