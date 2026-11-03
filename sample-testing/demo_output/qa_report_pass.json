@@ -1,0 +1,142 @@
+{
+  "blueprint_id": "bp-demo-001",
+  "version": 1,
+  "schema_version": "1.0.0",
+  "integrity_hash": "3b1adea34b745e0ab627c140f155fe27d5d9cc47ca104932f8f92eb933371fb9",
+  "evaluated_at": "2026-10-15T20:53:04+00:00",
+  "status": "approved",
+  "score_percent": 100.0,
+  "pass_score": 80.0,
+  "checks_passed": 15,
+  "checks_total": 15,
+  "checks": [
+    {
+      "name": "Blueprint content hash",
+      "code": "blueprint_hash_mismatch",
+      "status": "pass",
+      "expected": "integrity_hash matches canonical blueprint content",
+      "observed": "3b1adea34b745e0ab627c140f155fe27d5d9cc47ca104932f8f92eb933371fb9"
+    },
+    {
+      "name": "Blueprint identity handoff",
+      "code": "blueprint_mismatch",
+      "status": "pass",
+      "expected": "ID=bp-demo-001, version=1, hash=3b1adea34b745e0ab627c140f155fe27d5d9cc47ca104932f8f92eb933371fb9",
+      "observed": "ID=bp-demo-001, version=1, hash=3b1adea34b745e0ab627c140f155fe27d5d9cc47ca104932f8f92eb933371fb9"
+    },
+    {
+      "name": "Authorized source",
+      "code": "unauthorized_source",
+      "status": "pass",
+      "expected": "blueprint and candidate both confirm an authorized institutional source",
+      "observed": {
+        "blueprint": true,
+        "candidate": true
+      }
+    },
+    {
+      "name": "Teaser duration",
+      "code": "duration_out_of_range",
+      "status": "pass",
+      "expected": "60-90 seconds and within 1 second of blueprint target (75)",
+      "observed": 75.0
+    },
+    {
+      "name": "Claim-to-source traceability",
+      "code": "traceability_incomplete",
+      "status": "pass",
+      "expected": "every selected claim has transcript evidence and a valid source time range",
+      "observed": "1 of 1 claims traceable"
+    },
+    {
+      "name": "Source-supported claims",
+      "code": "unsupported_claim",
+      "status": "pass",
+      "expected": "zero claims unsupported by the original recording",
+      "observed": 0
+    },
+    {
+      "name": "Single-concept teaser structure",
+      "code": "blueprint_fidelity",
+      "status": "pass",
+      "expected": "hook, context, one concept, takeaway, call to action in order",
+      "observed": {
+        "structure": [
+          "hook",
+          "context",
+          "concept",
+          "takeaway",
+          "call_to_action"
+        ],
+        "concept_count": 1
+      }
+    },
+    {
+      "name": "Context preservation",
+      "code": "missing_context",
+      "status": "pass",
+      "expected": "required explanatory context is present",
+      "observed": true
+    },
+    {
+      "name": "Caption coverage",
+      "code": "caption_coverage_incomplete",
+      "status": "pass",
+      "expected": "100% spoken-content coverage when captions are required",
+      "observed": {
+        "captions_present": true,
+        "coverage_percent": 100.0
+      }
+    },
+    {
+      "name": "Caption word accuracy",
+      "code": "caption_accuracy_below_target",
+      "status": "pass",
+      "expected": "at least 95% against the verified transcript",
+      "observed": 97.0
+    },
+    {
+      "name": "Audio-video synchronization",
+      "code": "sync_error",
+      "status": "pass",
+      "expected": "audio and video are acceptably synchronized",
+      "observed": true
+    },
+    {
+      "name": "Clip boundary integrity",
+      "code": "boundary_error",
+      "status": "pass",
+      "expected": "cuts preserve complete phrases and do not mislead",
+      "observed": true
+    },
+    {
+      "name": "Call to action and source link",
+      "code": "source_link_missing",
+      "status": "pass",
+      "expected": "required call to action links to the full source recording",
+      "observed": true
+    },
+    {
+      "name": "Learner evidence governance",
+      "code": "learner_evidence_missing",
+      "status": "pass",
+      "expected": "ethics-approved learner evidence with a recorded sample size",
+      "observed": {
+        "ethics_approved": true,
+        "sample_size": 10
+      }
+    },
+    {
+      "name": "Learner comprehension",
+      "code": "comprehension_below_target",
+      "status": "pass",
+      "expected": "at least 80% correct in the approved pilot",
+      "observed": 90.0
+    }
+  ],
+  "failures": [],
+  "human_decision": {
+    "approved": true,
+    "reviewer": "Educator reviewer"
+  }
+}
